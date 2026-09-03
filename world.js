@@ -33,10 +33,13 @@ const AGENT_BADGE = {
   optimizer: "⚡", default: "💻",
 };
 
-// ---------- scene setup ----------
+// ---------- scene setup: a bright, modern open-plan office ----------
+const SKY_TOP = 0xbfe0ff;
+const SKY_HORIZON = 0xf3f2ee;
+const FOG_COLOR = 0xe9ecf3;
+
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x0e1533);
-scene.fog = new THREE.Fog(0x0e1533, 16, 34);
+scene.fog = new THREE.Fog(FOG_COLOR, 22, 50);
 
 const camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.1, 200);
 camera.position.set(0, 9.5, 13);
@@ -45,6 +48,7 @@ const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(innerWidth, innerHeight);
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 document.getElementById("canvas-holder").appendChild(renderer.domElement);
 
 const controls = new THREE.OrbitControls(camera, renderer.domElement);
@@ -53,49 +57,130 @@ controls.enableDamping = true;
 controls.dampingFactor = 0.08;
 controls.minDistance = 3;
 controls.maxDistance = 36;
-controls.maxPolarAngle = Math.PI * 0.49;
+controls.maxPolarAngle = Math.PI * 0.465;
 controls.autoRotate = true;
 controls.autoRotateSpeed = 0.5;
 renderer.domElement.addEventListener("pointerdown", () => (controls.autoRotate = false));
 
-scene.add(new THREE.HemisphereLight(0xffe9c7, 0x1a1450, 0.95));
-const sun = new THREE.DirectionalLight(0xffffff, 0.95);
-sun.position.set(8, 14, 6);
-sun.castShadow = true;
-sun.shadow.mapSize.set(1024, 1024);
-scene.add(sun);
-
-// starry backdrop
+// soft daylight sky dome (replaces flat color / night stars)
 {
-  const starGeo = new THREE.BufferGeometry();
-  const N = 400;
-  const pos = new Float32Array(N * 3);
-  for (let i = 0; i < N; i++) {
-    const r = 30 + Math.random() * 22;
-    const th = Math.random() * Math.PI * 2;
-    const ph = Math.acos(Math.random() * 2 - 1);
-    pos[i * 3] = r * Math.sin(ph) * Math.cos(th);
-    pos[i * 3 + 1] = Math.abs(r * Math.cos(ph)) * 0.6 + 4;
-    pos[i * 3 + 2] = r * Math.sin(ph) * Math.sin(th);
-  }
-  starGeo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
-  const starMat = new THREE.PointsMaterial({ color: 0xffffff, size: 0.18, transparent: true, opacity: 0.7 });
-  scene.add(new THREE.Points(starGeo, starMat));
+  const c = document.createElement("canvas");
+  c.width = 2; c.height = 256;
+  const ctx = c.getContext("2d");
+  const grad = ctx.createLinearGradient(0, 0, 0, 256);
+  grad.addColorStop(0, "#" + SKY_TOP.toString(16).padStart(6, "0"));
+  grad.addColorStop(1, "#" + SKY_HORIZON.toString(16).padStart(6, "0"));
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, 2, 256);
+  const tex = new THREE.CanvasTexture(c);
+  const sky = new THREE.Mesh(
+    new THREE.SphereGeometry(60, 24, 16),
+    new THREE.MeshBasicMaterial({ map: tex, side: THREE.BackSide, fog: false })
+  );
+  scene.add(sky);
 }
 
-// one continuous office floor — no islands, no towers, just a company floor
+scene.add(new THREE.HemisphereLight(0xffffff, 0xd8cdbb, 1.05));
+const sun = new THREE.DirectionalLight(0xfff6e8, 1.0);
+sun.position.set(9, 16, 7);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+sun.shadow.camera.left = -16;
+sun.shadow.camera.right = 16;
+sun.shadow.camera.top = 16;
+sun.shadow.camera.bottom = -16;
+sun.shadow.bias = -0.0015;
+scene.add(sun);
+const fill = new THREE.DirectionalLight(0xcfe4ff, 0.35);
+fill.position.set(-10, 8, -8);
+scene.add(fill);
+
+// one continuous, clean modern-office floor — no grid lines, no islands
 {
   const floor = new THREE.Mesh(
-    new THREE.CircleGeometry(15, 48),
-    new THREE.MeshStandardMaterial({ color: 0x1c2447, roughness: 0.95 })
+    new THREE.CircleGeometry(15, 64),
+    new THREE.MeshStandardMaterial({ color: 0xd7cdb4, roughness: 0.55, metalness: 0.04 })
   );
   floor.rotation.x = -Math.PI / 2;
   floor.receiveShadow = true;
   scene.add(floor);
 
-  const grid = new THREE.GridHelper(30, 30, 0x2c3566, 0x232b52);
-  grid.position.y = 0.001;
-  scene.add(grid);
+  // a soft round rug under the whole floor to warm up the center
+  const under = new THREE.Mesh(
+    new THREE.RingGeometry(9.5, 15.4, 64),
+    new THREE.MeshStandardMaterial({ color: 0xd7d0bf, roughness: 0.7 })
+  );
+  under.rotation.x = -Math.PI / 2;
+  under.position.y = -0.005;
+  scene.add(under);
+}
+
+// gentle floating dust-mote sparkle for atmosphere (no stars, just cozy light)
+{
+  const N = 90;
+  const pos = new Float32Array(N * 3);
+  for (let i = 0; i < N; i++) {
+    pos[i * 3] = (Math.random() - 0.5) * 26;
+    pos[i * 3 + 1] = Math.random() * 6 + 0.5;
+    pos[i * 3 + 2] = (Math.random() - 0.5) * 26;
+  }
+  const motesGeo = new THREE.BufferGeometry();
+  motesGeo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+  const motes = new THREE.Points(
+    motesGeo,
+    new THREE.PointsMaterial({ color: 0xfff4da, size: 0.05, transparent: true, opacity: 0.5 })
+  );
+  scene.add(motes);
+}
+
+// a modern pendant lamp — used above the hub and every department
+function makePendantLamp() {
+  const g = new THREE.Group();
+  const cord = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.012, 0.012, 2.2, 6),
+    new THREE.MeshStandardMaterial({ color: 0x3a3a3a })
+  );
+  cord.position.y = 1.1;
+  g.add(cord);
+  const shade = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.22, 0.32, 0.22, 20, 1, true),
+    new THREE.MeshStandardMaterial({ color: 0x2c2c34, roughness: 0.5, side: THREE.DoubleSide })
+  );
+  shade.position.y = 0;
+  g.add(shade);
+  const bulb = new THREE.Mesh(
+    new THREE.SphereGeometry(0.09, 12, 12),
+    new THREE.MeshBasicMaterial({ color: 0xfff2cf })
+  );
+  bulb.position.y = -0.05;
+  g.add(bulb);
+  const glow = new THREE.PointLight(0xffe9b8, 0.5, 4, 2);
+  glow.position.y = -0.05;
+  g.add(glow);
+  return g;
+}
+
+// a simple potted plant — office greenery
+function makePlant(scale = 1) {
+  const g = new THREE.Group();
+  const pot = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.16, 0.13, 0.22, 12),
+    new THREE.MeshStandardMaterial({ color: 0xb5754a, roughness: 0.8 })
+  );
+  pot.position.y = 0.11;
+  pot.castShadow = true;
+  g.add(pot);
+  const leafMat = new THREE.MeshStandardMaterial({ color: 0x4d9a5b, roughness: 0.7 });
+  for (let i = 0; i < 5; i++) {
+    const leaf = new THREE.Mesh(new THREE.SphereGeometry(0.16, 8, 8), leafMat);
+    const ang = (i / 5) * Math.PI * 2;
+    leaf.position.set(Math.cos(ang) * 0.08, 0.34 + Math.random() * 0.12, Math.sin(ang) * 0.08);
+    leaf.scale.set(0.7, 1.3, 0.7);
+    leaf.castShadow = true;
+    g.add(leaf);
+  }
+  g.scale.setScalar(scale);
+  return g;
 }
 
 const worldRoot = new THREE.Group();
@@ -182,68 +267,70 @@ function makeLimb(length, thickness, endRadius, color, endColor) {
 
 function makeWorker(color, { scale = 1, badge = "💻" } = {}) {
   const g = new THREE.Group();
-  const mainMat = new THREE.MeshStandardMaterial({ color, roughness: 0.45, metalness: 0.05 });
+  // every worker gets a slightly different finish — matte, satin, or metallic —
+  // so a room full of them still reads as "all different", like a real workshop
+  const metalness = 0.05 + Math.random() * 0.45;
+  const roughness = 0.75 - metalness * 0.5 + Math.random() * 0.1;
+  const mainMat = new THREE.MeshStandardMaterial({ color, roughness, metalness });
 
-  const torso = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.36, 0.3), mainMat);
-  torso.position.y = 0;
+  const torso = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.3, 0.28), mainMat);
+  torso.position.y = -0.04;
   torso.castShadow = true;
   g.add(torso);
 
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.27, 20, 16), mainMat);
-  head.position.y = 0.37;
+  // big bobble-head — the round glowing-eye face is the focal point
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.32, 22, 18), mainMat);
+  head.position.y = 0.38;
   head.castShadow = true;
   g.add(head);
 
-  // face
-  for (const side of [-1, 1]) {
-    const eyeWhite = new THREE.Mesh(
-      new THREE.SphereGeometry(0.06, 10, 10),
-      new THREE.MeshStandardMaterial({ color: 0xffffff })
-    );
-    eyeWhite.position.set(side * 0.1, 0.4, 0.23);
-    g.add(eyeWhite);
-    const pupil = new THREE.Mesh(
-      new THREE.SphereGeometry(0.03, 8, 8),
-      new THREE.MeshStandardMaterial({ color: 0x1b1b2b })
-    );
-    pupil.position.set(side * 0.1, 0.4, 0.28);
-    g.add(pupil);
-    const cheek = new THREE.Mesh(
-      new THREE.CircleGeometry(0.05, 14),
-      new THREE.MeshBasicMaterial({ color: 0xff8fa3, transparent: true, opacity: 0.55 })
-    );
-    cheek.position.set(side * 0.16, 0.32, 0.22);
-    cheek.lookAt(cheek.position.clone().add(new THREE.Vector3(0, 0, 1)));
-    g.add(cheek);
-  }
+  // single glowing round eye/visor, like a friendly little screen
+  const visor = new THREE.Mesh(
+    new THREE.CircleGeometry(0.18, 28),
+    new THREE.MeshStandardMaterial({ color: 0x14161f, roughness: 0.3, metalness: 0.3 })
+  );
+  visor.position.set(0, 0.4, 0.285);
+  g.add(visor);
+  const glowColor = 0xd8f6ff;
+  const eyeGlow = new THREE.Mesh(
+    new THREE.CircleGeometry(0.135, 28),
+    new THREE.MeshBasicMaterial({ color: glowColor })
+  );
+  eyeGlow.position.set(0, 0.4, 0.293);
+  g.add(eyeGlow);
+  const eyeLight = new THREE.PointLight(glowColor, 0.35, 1.2, 2);
+  eyeLight.position.set(0, 0.4, 0.4);
+  g.add(eyeLight);
+  g.userData.eyeGlow = eyeGlow;
+
   // little antenna — reads "robot"
   const antenna = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.012, 0.012, 0.12, 6),
+    new THREE.CylinderGeometry(0.012, 0.012, 0.14, 6),
     new THREE.MeshStandardMaterial({ color: 0x9aa0c0 })
   );
-  antenna.position.set(0, 0.6, 0);
+  antenna.position.set(0, 0.68, 0);
   g.add(antenna);
   const antennaTip = new THREE.Mesh(
-    new THREE.SphereGeometry(0.035, 8, 8),
+    new THREE.SphereGeometry(0.04, 8, 8),
     new THREE.MeshStandardMaterial({ color: 0xffe066, emissive: 0x775500 })
   );
-  antennaTip.position.set(0, 0.67, 0);
+  antennaTip.position.set(0, 0.76, 0);
   g.add(antennaTip);
 
   // arms (hands at the end)
-  const armL = makeLimb(0.3, 0.055, 0.08, color, 0xf1f3f8);
-  armL.position.set(-0.27, 0.13, 0);
+  const armL = makeLimb(0.28, 0.055, 0.08, color, 0xf1f3f8);
+  armL.position.set(-0.25, 0.09, 0);
   g.add(armL);
-  const armR = makeLimb(0.3, 0.055, 0.08, color, 0xf1f3f8);
-  armR.position.set(0.27, 0.13, 0);
+  const armR = makeLimb(0.28, 0.055, 0.08, color, 0xf1f3f8);
+  armR.position.set(0.25, 0.09, 0);
   g.add(armR);
 
   // legs (feet at the end)
-  const legL = makeLimb(0.3, 0.07, 0.095, 0x333a5c, 0x2a3050);
-  legL.position.set(-0.13, -0.18, 0);
+  const legL = makeLimb(0.28, 0.07, 0.095, 0x333a5c, 0x2a3050);
+  legL.position.set(-0.12, -0.22, 0);
   g.add(legL);
-  const legR = makeLimb(0.3, 0.07, 0.095, 0x333a5c, 0x2a3050);
-  legR.position.set(0.13, -0.18, 0);
+  const legR = makeLimb(0.28, 0.07, 0.095, 0x333a5c, 0x2a3050);
+  legR.position.set(0.12, -0.22, 0);
   g.add(legR);
 
   // role badge, floating above the antenna
@@ -392,6 +479,16 @@ function ensureHub() {
   crown.position.set(0, 1.7, 0);
   hubGroup.add(crown);
 
+  const lamp = makePendantLamp();
+  lamp.position.set(0, 3.2, 0);
+  hubGroup.add(lamp);
+
+  for (const p of [[-1.7, -0.6], [1.7, -0.7], [-1.2, 1.6], [1.4, 1.4]]) {
+    const plant = makePlant(0.9 + Math.random() * 0.3);
+    plant.position.set(p[0], 0, p[1]);
+    hubGroup.add(plant);
+  }
+
   worldRoot.add(hubGroup);
   spawnPop(hubGroup);
   return hubGroup;
@@ -434,7 +531,7 @@ function upsertWorker(id, { color, scale, labelText, status, badge, parentGroup,
   entry.group.userData.home = entry.group.userData.savedWorld
     ? new THREE.Vector3(entry.group.userData.savedWorld.x, 0, entry.group.userData.savedWorld.z)
     : home;
-  entry.group.userData.baseY = 0.48 * scale;
+  entry.group.userData.baseY = 0.5 * scale;
 
   if (entry.lastStatus !== status) {
     entry.mood = MOODS[status] || MOODS.pending;
@@ -545,6 +642,17 @@ async function syncState() {
       const label = makeLabel(`🏢 ${team.name}`, { size: 26, color: "#fff" });
       label.position.set(0, radius * 0.35 + 1.2, 0);
       group.add(label);
+
+      const lamp = makePendantLamp();
+      lamp.position.set(0, 3, 0);
+      group.add(lamp);
+      for (let pi = 0; pi < 3; pi++) {
+        const ang = (pi / 3) * Math.PI * 2 + 0.6;
+        const plant = makePlant(0.8 + Math.random() * 0.3);
+        plant.position.set(Math.cos(ang) * radius * 1.05, 0, Math.sin(ang) * radius * 1.05);
+        group.add(plant);
+      }
+
       worldRoot.add(group);
       spawnPop(group);
       zone = { group, rug, radius };
@@ -998,6 +1106,66 @@ window.addEventListener("resize", () => {
   camera.updateProjectionMatrix();
   renderer.setSize(innerWidth, innerHeight);
 });
+
+// ---------- ambient decor: fill the empty floor so the office feels lived-in ----------
+function makeBookshelf() {
+  const g = new THREE.Group();
+  const wood = new THREE.MeshStandardMaterial({ color: 0x9c7b52, roughness: 0.7 });
+  const frame = new THREE.Mesh(new THREE.BoxGeometry(0.7, 1.1, 0.28), wood);
+  frame.position.y = 0.55;
+  frame.castShadow = true;
+  g.add(frame);
+  const folderColors = [0xff6b6b, 0xffd43b, 0x51cf66, 0x4dabf7, 0xda77f2];
+  for (let shelf = 0; shelf < 3; shelf++) {
+    for (let i = 0; i < 4; i++) {
+      const folder = new THREE.Mesh(
+        new THREE.BoxGeometry(0.09, 0.28, 0.2),
+        new THREE.MeshStandardMaterial({ color: folderColors[(shelf * 4 + i) % folderColors.length], roughness: 0.6 })
+      );
+      folder.position.set(-0.26 + i * 0.13, 0.28 + shelf * 0.34, 0);
+      g.add(folder);
+    }
+  }
+  return g;
+}
+
+function makeSofa(color) {
+  const g = new THREE.Group();
+  const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.85 });
+  const seat = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.28, 0.42), mat);
+  seat.position.y = 0.2;
+  seat.castShadow = true;
+  g.add(seat);
+  const back = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.36, 0.12), mat);
+  back.position.set(0, 0.44, -0.16);
+  g.add(back);
+  for (const side of [-1, 1]) {
+    const arm = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.3, 0.42), mat);
+    arm.position.set(side * 0.42, 0.3, 0);
+    g.add(arm);
+  }
+  return g;
+}
+
+function scatterAmbientDecor() {
+  const ringMin = 9.8, ringMax = 13.6;
+  const decorMakers = [
+    () => makePlant(1 + Math.random() * 0.4),
+    () => makePlant(0.7 + Math.random() * 0.3),
+    () => makeBookshelf(),
+    () => makeSofa([0x748ffc, 0xff8fa3, 0x69db7c, 0xffa94d][Math.floor(Math.random() * 4)]),
+  ];
+  const count = 16;
+  for (let i = 0; i < count; i++) {
+    const ang = (i / count) * Math.PI * 2 + Math.random() * 0.3;
+    const r = ringMin + Math.random() * (ringMax - ringMin);
+    const item = decorMakers[i % decorMakers.length]();
+    item.position.set(Math.cos(ang) * r, 0, Math.sin(ang) * r);
+    item.rotation.y = Math.random() * Math.PI * 2;
+    worldRoot.add(item);
+  }
+}
+scatterAmbientDecor();
 
 syncState();
 setInterval(syncState, POLL_MS);
