@@ -355,6 +355,8 @@ class Handler(BaseHTTPRequestHandler):
             self._send_file("vendor/three.min.js", "application/javascript; charset=utf-8")
         elif path == "/vendor/OrbitControls.js":
             self._send_file("vendor/OrbitControls.js", "application/javascript; charset=utf-8")
+        elif path.startswith("/assets/faces/") and "/" not in path[len("/assets/faces/"):] and path.endswith(".png"):
+            self._send_file(path.lstrip("/"), "image/png")
         else:
             self.send_response(404)
             self.end_headers()

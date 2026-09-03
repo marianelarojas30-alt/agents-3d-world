@@ -33,6 +33,28 @@ const AGENT_BADGE = {
   optimizer: "⚡", default: "💻",
 };
 
+// the exact characters from the reference art — body color + cropped real face
+const ROBOT_VARIANTS = [
+  { color: 0xa89fc2, face: "/assets/faces/purple_editor.png" },
+  { color: 0x7f9a5c, face: "/assets/faces/moss_laptop.png" },
+  { color: 0xc99658, face: "/assets/faces/copper_writer.png" },
+  { color: 0xd9d2c0, face: "/assets/faces/cream_box.png" },
+  { color: 0x3f7a94, face: "/assets/faces/blue_small.png" },
+  { color: 0xc7c3a0, face: "/assets/faces/moss_small.png" },
+  { color: 0xcfc7b8, face: "/assets/faces/cream_small.png" },
+];
+const _faceTextureCache = new Map();
+const _textureLoader = new THREE.TextureLoader();
+function getFaceTexture(url) {
+  if (!_faceTextureCache.has(url)) _faceTextureCache.set(url, _textureLoader.load(url));
+  return _faceTextureCache.get(url);
+}
+function variantIndexFor(id) {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
+  return h % ROBOT_VARIANTS.length;
+}
+
 // ---------- scene setup: a cozy warm-wood workshop, golden lamp light ----------
 const SKY_TOP = 0x3a2c22;
 const SKY_HORIZON = 0xd98f4e;
@@ -323,8 +345,10 @@ function makeGrainTexture(hex) {
   return tex;
 }
 
-function makeWorker(color, { scale = 1, badge = "💻" } = {}) {
+function makeWorker(statusColor, { scale = 1, badge = "💻", variantIndex = 0 } = {}) {
   const g = new THREE.Group();
+  const variant = ROBOT_VARIANTS[variantIndex % ROBOT_VARIANTS.length];
+  const color = variant.color;
   // every worker gets a slightly different finish — matte, satin, or metallic —
   // so a room full of them still reads as "all different", like a real workshop
   const metalness = 0.05 + Math.random() * 0.45;
@@ -344,36 +368,26 @@ function makeWorker(color, { scale = 1, badge = "💻" } = {}) {
   head.castShadow = true;
   g.add(head);
 
-  // single glowing round eye/visor, like a friendly little screen
+  // the exact face from the reference art, on a round visor
   const visor = new THREE.Mesh(
-    new THREE.CircleGeometry(0.18, 28),
-    new THREE.MeshStandardMaterial({ color: 0x14161f, roughness: 0.3, metalness: 0.3 })
+    new THREE.CircleGeometry(0.19, 28),
+    new THREE.MeshBasicMaterial({ map: getFaceTexture(variant.face), transparent: true })
   );
-  visor.position.set(0, 0.4, 0.285);
+  visor.position.set(0, 0.4, 0.29);
   g.add(visor);
-  const glowColor = 0xd8f6ff;
-  const eyeGlow = new THREE.Mesh(
-    new THREE.CircleGeometry(0.135, 28),
-    new THREE.MeshBasicMaterial({ color: glowColor })
-  );
-  eyeGlow.position.set(0, 0.4, 0.293);
-  g.add(eyeGlow);
-  const eyeLight = new THREE.PointLight(glowColor, 0.35, 1.2, 2);
+  const eyeLight = new THREE.PointLight(0xd8f6ff, 0.3, 1.2, 2);
   eyeLight.position.set(0, 0.4, 0.4);
   g.add(eyeLight);
-  g.userData.eyeGlow = eyeGlow;
 
-  // little antenna — reads "robot"
+  // little antenna — tip glows the worker's live status color
   const antenna = new THREE.Mesh(
     new THREE.CylinderGeometry(0.012, 0.012, 0.14, 6),
     new THREE.MeshStandardMaterial({ color: 0x9aa0c0 })
   );
   antenna.position.set(0, 0.68, 0);
   g.add(antenna);
-  const antennaTip = new THREE.Mesh(
-    new THREE.SphereGeometry(0.04, 8, 8),
-    new THREE.MeshStandardMaterial({ color: 0xffe066, emissive: 0x775500 })
-  );
+  const antennaMat = new THREE.MeshStandardMaterial({ color: statusColor, emissive: statusColor, emissiveIntensity: 0.6 });
+  const antennaTip = new THREE.Mesh(new THREE.SphereGeometry(0.04, 8, 8), antennaMat);
   antennaTip.position.set(0, 0.76, 0);
   g.add(antennaTip);
 
@@ -399,6 +413,7 @@ function makeWorker(color, { scale = 1, badge = "💻" } = {}) {
   g.add(badgeSprite);
 
   g.userData.mainMat = mainMat;
+  g.userData.antennaMat = antennaMat;
   g.userData.armL = armL;
   g.userData.armR = armR;
   g.userData.legL = legL;
@@ -530,7 +545,7 @@ function ensureHub() {
   hubGroup = new THREE.Group();
   hubGroup.add(makeRug(2.4, "#ffd43b"));
 
-  hubMascot = makeWorker(0xffd43b, { scale: 1.5, badge: "👑" });
+  hubMascot = makeWorker(0xffd43b, { scale: 1.5, badge: "👑", variantIndex: variantIndexFor("hub") });
   hubMascot.position.set(0, 0.72, 0);
   hubGroup.userData.baseY = 0.72;
   hubGroup.add(hubMascot);
@@ -573,7 +588,7 @@ function upsertWorker(id, { color, scale, labelText, status, badge, parentGroup,
   const home = deskPos.clone().add(new THREE.Vector3(0, 0, 0.46));
 
   if (!entry) {
-    const group = makeWorker(color, { scale, badge });
+    const group = makeWorker(color, { scale, badge, variantIndex: variantIndexFor(id) });
     const label = makeLabel(labelText, { size: 24 });
     label.position.set(0, 1.15 * scale + labelLift, 0);
     group.add(label);
@@ -591,7 +606,8 @@ function upsertWorker(id, { color, scale, labelText, status, badge, parentGroup,
   }
 
   entry.data = data;
-  entry.group.userData.mainMat.color.set(color);
+  entry.group.userData.antennaMat.color.set(color);
+  entry.group.userData.antennaMat.emissive.set(color);
   entry.group.userData.home = entry.group.userData.savedWorld
     ? new THREE.Vector3(entry.group.userData.savedWorld.x, 0, entry.group.userData.savedWorld.z)
     : home;
@@ -669,7 +685,7 @@ async function syncState() {
       const id = "worker:" + w.name;
       let node = workerNodes.get(id);
       if (!node) {
-        const wg = makeWorker(0x4dabf7, { scale: 0.6, badge: WORKER_ICON[w.name] || "🐣" });
+        const wg = makeWorker(0x4dabf7, { scale: 0.6, badge: WORKER_ICON[w.name] || "🐣", variantIndex: variantIndexFor(id) });
         const lbl = makeLabel(w.name, { size: 18 });
         lbl.position.set(0, 0.9, 0);
         wg.add(lbl);
@@ -689,7 +705,9 @@ async function syncState() {
       }
       node.group.userData.baseY = 0.29;
       node.group.userData.mood = w.isRunning ? MOODS.running : MOODS.idle;
-      node.group.userData.mainMat.color.set(w.isRunning ? 0x51cf66 : 0x4dabf7);
+      const wColor = w.isRunning ? 0x51cf66 : 0x4dabf7;
+      node.group.userData.antennaMat.color.set(wColor);
+      node.group.userData.antennaMat.emissive.set(wColor);
       i++;
     }
   }
