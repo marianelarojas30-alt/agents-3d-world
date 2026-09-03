@@ -25,6 +25,10 @@ Or use the launcher for your OS:
 - macOS/Linux: `./start.sh`
 - Windows: double-click `start.bat`
 
+## Talk to a worker
+
+Click any worker to open a chat panel. By default it answers from the real data only (no AI, no cost). If you have [Ollama](https://ollama.com) running locally and/or the [Codex CLI](https://github.com/openai/codex) signed in, they show up in the 🧠 dropdown and you get real, in-character replies grounded in that worker's actual task/status/progress — it's told never to invent work, and to be honest that it can't yet execute real commands. Nothing is sent anywhere except your own local Ollama daemon or your own already-authenticated Codex CLI.
+
 ## Controls
 
 - **Drag on empty space** — orbit the camera (see the world from any angle)

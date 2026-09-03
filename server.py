@@ -8,11 +8,42 @@ Three.js frontend, plus static files. No network calls, no external deps.
 import json
 import glob
 import os
+import shutil
+import subprocess
+import tempfile
 import time
+import urllib.request
+import urllib.error
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 HOME = os.path.expanduser("~")
 ROOT = os.path.dirname(os.path.abspath(__file__))
+OLLAMA_URL = "http://127.0.0.1:11434"
+
+
+def find_codex_bin():
+    found = shutil.which("codex")
+    if found:
+        return found
+    # launchd/cron run with a minimal PATH that skips npm/homebrew bin dirs
+    for candidate in (
+        os.path.join(HOME, ".npm-global/bin/codex"),
+        "/usr/local/bin/codex",
+        "/opt/homebrew/bin/codex",
+    ):
+        if os.path.isfile(candidate) and os.access(candidate, os.X_OK):
+            return candidate
+    return None
+
+
+CODEX_BIN = find_codex_bin()
+
+# launchd/cron give this process a minimal PATH (no /usr/local/bin, no npm
+# global bin) — codex needs `node` on PATH even when we call its absolute
+# path, so make sure the usual spots are there for any subprocess we spawn.
+for _extra in ("/usr/local/bin", "/opt/homebrew/bin", os.path.join(HOME, ".npm-global/bin")):
+    if _extra not in os.environ.get("PATH", "").split(":"):
+        os.environ["PATH"] = os.environ.get("PATH", "") + ":" + _extra
 
 # Cute, saturated palette per team — assigned deterministically by name hash
 PALETTE = [
@@ -167,13 +198,100 @@ def build_state():
     }
 
 
+# ---------------------------------------------------------------------------
+# Chat backends — Ollama (local, free) and Codex CLI (uses your ChatGPT login).
+# Both are optional: the frontend falls back to fact-only answers if neither
+# is available or a call fails. Nothing here talks to any server except your
+# own machine's Ollama daemon, or the codex binary you already have signed in.
+# ---------------------------------------------------------------------------
+
+def list_ollama_models():
+    try:
+        with urllib.request.urlopen(f"{OLLAMA_URL}/api/tags", timeout=2) as r:
+            data = json.load(r)
+        return [m["name"] for m in data.get("models", [])]
+    except Exception:
+        return []
+
+
+def backends_info():
+    return {
+        "ollama": {"available": bool(list_ollama_models()), "models": list_ollama_models()},
+        "codex": {"available": bool(CODEX_BIN)},
+    }
+
+
+def build_grounding_prompt(worker, message):
+    facts = [
+        f"team: {worker.get('team', 'unknown')}",
+        f"role: {worker.get('role', 'worker')}",
+        f"current task: {worker.get('task') or 'none assigned'}",
+        f"status: {worker.get('status', 'unknown')}",
+    ]
+    if worker.get("progress") is not None:
+        facts.append(f"progress: {worker['progress']}%")
+    if worker.get("priority"):
+        facts.append(f"priority: {worker['priority']}")
+    if worker.get("tags"):
+        facts.append(f"tags: {', '.join(worker['tags'])}")
+    return (
+        "You are role-playing as a friendly little office-robot character in a 3D "
+        "visualization of a real task-tracking system (Ruflo/claude-flow). Stay fully "
+        "in character, be warm and brief (1-3 short sentences). Answer ONLY using the "
+        "facts below — never invent extra work, deadlines, or people. You cannot "
+        "actually execute commands or change anything real; if asked to do something "
+        "(pause, start, reprioritize, etc.) say so honestly, in character.\n\n"
+        "FACTS:\n" + "\n".join(f"- {f}" for f in facts) +
+        f"\n\nThe user asks: \"{message}\"\n\nReply as the character, in plain text, no markdown."
+    )
+
+
+def call_ollama(model, worker, message):
+    prompt = build_grounding_prompt(worker, message)
+    payload = json.dumps({
+        "model": model,
+        "messages": [{"role": "user", "content": prompt}],
+        "stream": False,
+    }).encode("utf-8")
+    req = urllib.request.Request(
+        f"{OLLAMA_URL}/api/chat", data=payload,
+        headers={"Content-Type": "application/json"}, method="POST",
+    )
+    with urllib.request.urlopen(req, timeout=60) as r:
+        data = json.load(r)
+    return data.get("message", {}).get("content", "").strip()
+
+
+def call_codex(worker, message):
+    if not CODEX_BIN:
+        raise RuntimeError("codex CLI not found")
+    prompt = build_grounding_prompt(worker, message)
+    with tempfile.TemporaryDirectory() as tmp:
+        out_file = os.path.join(tmp, "reply.txt")
+        subprocess.run(
+            [
+                CODEX_BIN, "exec",
+                "--sandbox", "read-only",
+                "--skip-git-repo-check",
+                "--ephemeral",
+                "--output-last-message", out_file,
+                prompt,
+            ],
+            cwd=tmp, timeout=60, capture_output=True, check=True,
+        )
+        if os.path.exists(out_file):
+            with open(out_file, "r") as f:
+                return f.read().strip()
+    return ""
+
+
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
         pass  # keep console quiet
 
-    def _send_json(self, payload):
+    def _send_json(self, payload, status=200):
         body = json.dumps(payload).encode("utf-8")
-        self.send_response(200)
+        self.send_response(status)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
@@ -195,10 +313,39 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def do_POST(self):
+        path = self.path.split("?")[0]
+        if path == "/api/chat":
+            length = int(self.headers.get("Content-Length", 0))
+            try:
+                body = json.loads(self.rfile.read(length) or b"{}")
+            except Exception:
+                self._send_json({"error": "bad request"}, status=400)
+                return
+            backend = body.get("backend", "")
+            worker = body.get("worker", {})
+            message = str(body.get("message", ""))[:500]
+            try:
+                if backend.startswith("ollama:"):
+                    reply = call_ollama(backend.split(":", 1)[1], worker, message)
+                elif backend == "codex":
+                    reply = call_codex(worker, message)
+                else:
+                    self._send_json({"error": "unknown backend"}, status=400)
+                    return
+                self._send_json({"reply": reply or "…"})
+            except Exception as e:
+                self._send_json({"error": str(e)}, status=502)
+        else:
+            self.send_response(404)
+            self.end_headers()
+
     def do_GET(self):
         path = self.path.split("?")[0]
         if path == "/api/state":
             self._send_json(build_state())
+        elif path == "/api/backends":
+            self._send_json(backends_info())
         elif path == "/" or path == "/index.html":
             self._send_file("index.html", "text/html; charset=utf-8")
         elif path == "/world.js":

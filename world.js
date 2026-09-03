@@ -742,7 +742,31 @@ window.addEventListener("pointerup", (ev) => {
 // ---------- talk to a worker ----------
 const panelEl = document.getElementById("agent-panel");
 const apLog = document.getElementById("ap-log");
+const apBackendSelect = document.getElementById("ap-backend");
 let activeEntry = null;
+
+// discover what "brains" are actually available on this machine, once
+fetch("/api/backends").then((r) => r.json()).then((info) => {
+  for (const model of info.ollama?.models || []) {
+    const opt = document.createElement("option");
+    opt.value = "ollama:" + model;
+    opt.textContent = "🦙 " + model + " (local, free)";
+    apBackendSelect.appendChild(opt);
+  }
+  if (info.codex?.available) {
+    const opt = document.createElement("option");
+    opt.value = "codex";
+    opt.textContent = "🤖 Codex (your ChatGPT login)";
+    apBackendSelect.appendChild(opt);
+  }
+  const saved = localStorage.getItem("agentWorldBackend");
+  if (saved && [...apBackendSelect.options].some((o) => o.value === saved)) {
+    apBackendSelect.value = saved;
+  }
+}).catch(() => {});
+apBackendSelect.addEventListener("change", () => {
+  localStorage.setItem("agentWorldBackend", apBackendSelect.value);
+});
 
 function addMsg(text, who) {
   const div = document.createElement("div");
@@ -809,14 +833,42 @@ function answerFor(d, qRaw) {
   return `Working on: "${d.task}" (${d.status}). Ask me about progress, priority, team, or tags!`;
 }
 
-document.getElementById("ap-form").addEventListener("submit", (ev) => {
+document.getElementById("ap-form").addEventListener("submit", async (ev) => {
   ev.preventDefault();
   const input = document.getElementById("ap-input");
   const text = input.value.trim();
   if (!text || !activeEntry) return;
   addMsg(text, "me");
   input.value = "";
-  setTimeout(() => addMsg(answerFor(activeEntry.data || {}, text), "them"), 220);
+
+  const backend = apBackendSelect.value;
+  const data = activeEntry.data || {};
+
+  if (backend === "facts" || !backend) {
+    setTimeout(() => addMsg(answerFor(data, text), "them"), 220);
+    return;
+  }
+
+  const thinking = document.createElement("div");
+  thinking.className = "ap-msg them thinking";
+  thinking.textContent = "…";
+  apLog.appendChild(thinking);
+  apLog.scrollTop = apLog.scrollHeight;
+
+  try {
+    const res = await fetch("/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ backend, worker: data, message: text }),
+    });
+    const out = await res.json();
+    thinking.remove();
+    if (out.reply) addMsg(out.reply, "them");
+    else addMsg(`(${out.error || "no reply"}) — ` + answerFor(data, text), "them");
+  } catch (e) {
+    thinking.remove();
+    addMsg("(couldn't reach the local AI) — " + answerFor(data, text), "them");
+  }
 });
 
 // ---------- animation loop ----------
