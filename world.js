@@ -33,10 +33,10 @@ const AGENT_BADGE = {
   optimizer: "⚡", default: "💻",
 };
 
-// ---------- scene setup: a bright, modern open-plan office ----------
-const SKY_TOP = 0xbfe0ff;
-const SKY_HORIZON = 0xf3f2ee;
-const FOG_COLOR = 0xe9ecf3;
+// ---------- scene setup: a cozy warm-wood workshop, golden lamp light ----------
+const SKY_TOP = 0x3a2c22;
+const SKY_HORIZON = 0xd98f4e;
+const FOG_COLOR = 0x8a6144;
 
 const scene = new THREE.Scene();
 scene.fog = new THREE.Fog(FOG_COLOR, 22, 50);
@@ -65,24 +65,29 @@ renderer.domElement.addEventListener("pointerdown", () => (controls.autoRotate =
 // soft daylight sky dome (replaces flat color / night stars)
 {
   const c = document.createElement("canvas");
-  c.width = 2; c.height = 256;
+  c.width = 4; c.height = 512;
   const ctx = c.getContext("2d");
-  const grad = ctx.createLinearGradient(0, 0, 0, 256);
+  const grad = ctx.createLinearGradient(0, 0, 0, 512);
   grad.addColorStop(0, "#" + SKY_TOP.toString(16).padStart(6, "0"));
+  grad.addColorStop(0.55, "#b5623a");
   grad.addColorStop(1, "#" + SKY_HORIZON.toString(16).padStart(6, "0"));
   ctx.fillStyle = grad;
-  ctx.fillRect(0, 0, 2, 256);
+  ctx.fillRect(0, 0, 4, 512);
+  for (let i = 0; i < 4000; i++) {
+    ctx.fillStyle = `rgba(0,0,0,${Math.random() * 0.02})`;
+    ctx.fillRect(Math.random() * 4, Math.random() * 512, 2, 2);
+  }
   const tex = new THREE.CanvasTexture(c);
   const sky = new THREE.Mesh(
-    new THREE.SphereGeometry(60, 24, 16),
+    new THREE.SphereGeometry(60, 48, 32),
     new THREE.MeshBasicMaterial({ map: tex, side: THREE.BackSide, fog: false })
   );
   scene.add(sky);
 }
 
-scene.add(new THREE.HemisphereLight(0xffffff, 0xd8cdbb, 1.05));
-const sun = new THREE.DirectionalLight(0xfff6e8, 1.0);
-sun.position.set(9, 16, 7);
+scene.add(new THREE.HemisphereLight(0xffdca8, 0x4a3420, 0.9));
+const sun = new THREE.DirectionalLight(0xffcf8f, 1.15);
+sun.position.set(9, 14, 5);
 sun.castShadow = true;
 sun.shadow.mapSize.set(2048, 2048);
 sun.shadow.camera.left = -16;
@@ -91,31 +96,45 @@ sun.shadow.camera.top = 16;
 sun.shadow.camera.bottom = -16;
 sun.shadow.bias = -0.0015;
 scene.add(sun);
-const fill = new THREE.DirectionalLight(0xcfe4ff, 0.35);
-fill.position.set(-10, 8, -8);
+const fill = new THREE.DirectionalLight(0xff9d5c, 0.3);
+fill.position.set(-10, 6, -8);
 scene.add(fill);
 
-// one continuous, clean modern-office floor — no grid lines, no islands
+// warm wood-plank workshop floor — no grid lines, no islands
 {
+  const c = document.createElement("canvas");
+  c.width = c.height = 512;
+  const ctx = c.getContext("2d");
+  ctx.fillStyle = "#8a6238";
+  ctx.fillRect(0, 0, 512, 512);
+  for (let i = 0; i < 3000; i++) {
+    const shade = Math.random() < 0.5 ? 0 : 255;
+    ctx.fillStyle = `rgba(${shade},${shade < 128 ? 40 : 200},${shade < 128 ? 20 : 140},${Math.random() * 0.07})`;
+    const s = 2 + Math.random() * 3;
+    ctx.fillRect(Math.random() * 512, Math.random() * 512, s, s);
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(4, 4);
   const floor = new THREE.Mesh(
     new THREE.CircleGeometry(15, 64),
-    new THREE.MeshStandardMaterial({ color: 0xd7cdb4, roughness: 0.55, metalness: 0.04 })
+    new THREE.MeshStandardMaterial({ map: tex, color: 0xffffff, roughness: 0.75 })
   );
   floor.rotation.x = -Math.PI / 2;
   floor.receiveShadow = true;
   scene.add(floor);
 
-  // a soft round rug under the whole floor to warm up the center
+  // soft warm vignette ring toward the edges, like a lamp-lit room fading to shadow
   const under = new THREE.Mesh(
     new THREE.RingGeometry(9.5, 15.4, 64),
-    new THREE.MeshStandardMaterial({ color: 0xd7d0bf, roughness: 0.7 })
+    new THREE.MeshStandardMaterial({ color: 0x4a3220, roughness: 0.9, transparent: true, opacity: 0.35 })
   );
   under.rotation.x = -Math.PI / 2;
   under.position.y = -0.005;
   scene.add(under);
 }
 
-// gentle floating dust-mote sparkle for atmosphere (no stars, just cozy light)
+// warm floating dust-mote sparkle, lit like it's drifting through lamp light
 {
   const N = 90;
   const pos = new Float32Array(N * 3);
@@ -128,9 +147,31 @@ scene.add(fill);
   motesGeo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
   const motes = new THREE.Points(
     motesGeo,
-    new THREE.PointsMaterial({ color: 0xfff4da, size: 0.05, transparent: true, opacity: 0.5 })
+    new THREE.PointsMaterial({ color: 0xffcf8a, size: 0.06, transparent: true, opacity: 0.6 })
   );
   scene.add(motes);
+}
+
+// warm string-lights arc — the cozy overhead touch from the reference photo
+function makeStringLights(radius, count) {
+  const g = new THREE.Group();
+  const wireMat = new THREE.LineBasicMaterial({ color: 0x2a2018 });
+  const pts = [];
+  for (let i = 0; i <= count; i++) {
+    const a = (i / count) * Math.PI;
+    pts.push(new THREE.Vector3(Math.cos(a) * radius, 1.4 + Math.sin(a) * 1.1, 0));
+  }
+  g.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), wireMat));
+  for (const p of pts) {
+    const bulb = new THREE.Mesh(
+      new THREE.SphereGeometry(0.045, 8, 8),
+      new THREE.MeshBasicMaterial({ color: 0xffe2a0 })
+    );
+    bulb.position.copy(p);
+    bulb.position.y -= 0.03;
+    g.add(bulb);
+  }
+  return g;
 }
 
 // a modern pendant lamp — used above the hub and every department
@@ -265,13 +306,32 @@ function makeLimb(length, thickness, endRadius, color, endColor) {
   return pivot;
 }
 
+// a subtle painted/worn-metal grain, so bodies don't read as flat plastic
+function makeGrainTexture(hex) {
+  const c = document.createElement("canvas");
+  c.width = c.height = 64;
+  const ctx = c.getContext("2d");
+  ctx.fillStyle = "#" + hex.toString(16).padStart(6, "0");
+  ctx.fillRect(0, 0, 64, 64);
+  for (let i = 0; i < 500; i++) {
+    const shade = Math.random() < 0.5 ? 0 : 255;
+    ctx.fillStyle = `rgba(${shade},${shade},${shade},${Math.random() * 0.06})`;
+    ctx.fillRect(Math.random() * 64, Math.random() * 64, 1.4, 1.4);
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  return tex;
+}
+
 function makeWorker(color, { scale = 1, badge = "💻" } = {}) {
   const g = new THREE.Group();
   // every worker gets a slightly different finish — matte, satin, or metallic —
   // so a room full of them still reads as "all different", like a real workshop
   const metalness = 0.05 + Math.random() * 0.45;
   const roughness = 0.75 - metalness * 0.5 + Math.random() * 0.1;
-  const mainMat = new THREE.MeshStandardMaterial({ color, roughness, metalness });
+  const mainMat = new THREE.MeshStandardMaterial({
+    color, roughness, metalness, map: makeGrainTexture(color),
+  });
 
   const torso = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.3, 0.28), mainMat);
   torso.position.y = -0.04;
@@ -483,6 +543,10 @@ function ensureHub() {
   lamp.position.set(0, 3.2, 0);
   hubGroup.add(lamp);
 
+  const lights = makeStringLights(2.6, 10);
+  lights.rotation.y = Math.PI / 4;
+  hubGroup.add(lights);
+
   for (const p of [[-1.7, -0.6], [1.7, -0.7], [-1.2, 1.6], [1.4, 1.4]]) {
     const plant = makePlant(0.9 + Math.random() * 0.3);
     plant.position.set(p[0], 0, p[1]);
@@ -646,6 +710,9 @@ async function syncState() {
       const lamp = makePendantLamp();
       lamp.position.set(0, 3, 0);
       group.add(lamp);
+      const lights = makeStringLights(radius * 1.1, 8);
+      lights.rotation.y = Math.random() * Math.PI * 2;
+      group.add(lights);
       for (let pi = 0; pi < 3; pi++) {
         const ang = (pi / 3) * Math.PI * 2 + 0.6;
         const plant = makePlant(0.8 + Math.random() * 0.3);
