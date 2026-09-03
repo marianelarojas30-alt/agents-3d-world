@@ -1233,14 +1233,14 @@ function makeSofa(color) {
 }
 
 function scatterAmbientDecor() {
-  const ringMin = 9.8, ringMax = 13.6;
+  const ringMin = 6.6, ringMax = 8.6;
   const decorMakers = [
     () => makePlant(1 + Math.random() * 0.4),
     () => makePlant(0.7 + Math.random() * 0.3),
     () => makeBookshelf(),
     () => makeSofa([0x748ffc, 0xff8fa3, 0x69db7c, 0xffa94d][Math.floor(Math.random() * 4)]),
   ];
-  const count = 16;
+  const count = 14;
   for (let i = 0; i < count; i++) {
     const ang = (i / count) * Math.PI * 2 + Math.random() * 0.3;
     const r = ringMin + Math.random() * (ringMax - ringMin);
@@ -1251,6 +1251,73 @@ function scatterAmbientDecor() {
   }
 }
 scatterAmbientDecor();
+
+// ---------- the forest — the office sits in a clearing inside it ----------
+function makeTree(scale = 1, pine = false) {
+  const g = new THREE.Group();
+  const trunkH = pine ? 1.6 : 1.1;
+  const trunk = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.09, 0.14, trunkH, 8),
+    new THREE.MeshStandardMaterial({ color: 0x5a3d24, roughness: 0.9 })
+  );
+  trunk.position.y = trunkH / 2;
+  trunk.castShadow = true;
+  g.add(trunk);
+
+  const greens = [0x3f7a3e, 0x4d8f4a, 0x5aa155, 0x386b3a];
+  const leafMat = () => new THREE.MeshStandardMaterial({
+    color: greens[Math.floor(Math.random() * greens.length)], roughness: 0.85,
+  });
+
+  if (pine) {
+    let y = trunkH * 0.55;
+    for (let i = 0; i < 4; i++) {
+      const r = 0.75 - i * 0.15;
+      const cone = new THREE.Mesh(new THREE.ConeGeometry(r, 0.85, 10), leafMat());
+      cone.position.y = y;
+      cone.castShadow = true;
+      g.add(cone);
+      y += 0.55;
+    }
+  } else {
+    const clusters = 3 + Math.floor(Math.random() * 2);
+    for (let i = 0; i < clusters; i++) {
+      const r = 0.5 + Math.random() * 0.35;
+      const blob = new THREE.Mesh(new THREE.SphereGeometry(r, 10, 8), leafMat());
+      const ang = (i / clusters) * Math.PI * 2;
+      blob.position.set(Math.cos(ang) * 0.25, trunkH + 0.25 + Math.random() * 0.3, Math.sin(ang) * 0.25);
+      blob.castShadow = true;
+      g.add(blob);
+    }
+  }
+  g.scale.setScalar(scale);
+  return g;
+}
+
+function plantForest() {
+  // wide forest floor so trees don't run out past the office clearing
+  const forestFloor = new THREE.Mesh(
+    new THREE.CircleGeometry(30, 64),
+    new THREE.MeshStandardMaterial({ color: 0x5c6b3f, roughness: 0.95 })
+  );
+  forestFloor.rotation.x = -Math.PI / 2;
+  forestFloor.position.y = -0.02;
+  forestFloor.receiveShadow = true;
+  worldRoot.add(forestFloor);
+
+  const N = 90;
+  for (let i = 0; i < N; i++) {
+    const ang = Math.random() * Math.PI * 2;
+    // denser the further out, but a few brave trees lean into the clearing edge too
+    const r = 8.2 + Math.pow(Math.random(), 0.6) * 20;
+    const scale = 0.8 + Math.random() * 1.1;
+    const tree = makeTree(scale, Math.random() < 0.35);
+    tree.position.set(Math.cos(ang) * r, 0, Math.sin(ang) * r);
+    tree.rotation.y = Math.random() * Math.PI * 2;
+    worldRoot.add(tree);
+  }
+}
+plantForest();
 
 syncState();
 setInterval(syncState, POLL_MS);
