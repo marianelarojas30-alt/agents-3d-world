@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Agents World</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #0e1533;
+    font-family: -apple-system, "Segoe UI", sans-serif; }
+  #canvas-holder { position: fixed; inset: 0; }
+  canvas { display: block; }
+
+  #hud {
+    position: fixed; top: 16px; left: 16px; z-index: 10;
+    color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,.5);
+    pointer-events: none;
+  }
+  #hud h1 { margin: 0 0 4px; font-size: 20px; }
+  #hud p { margin: 0; font-size: 13px; opacity: .85; }
+
+  #legend {
+    position: fixed; bottom: 16px; left: 16px; z-index: 10;
+    background: rgba(15,20,45,.72); backdrop-filter: blur(6px);
+    border-radius: 14px; padding: 10px 14px; color: #fff; font-size: 12px;
+    display: flex; gap: 14px; flex-wrap: wrap; max-width: min(90vw, 560px);
+  }
+  #legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+
+  #status-pill {
+    position: fixed; top: 16px; right: 16px; z-index: 10;
+    background: rgba(15,20,45,.72); backdrop-filter: blur(6px);
+    color: #fff; font-size: 12px; padding: 8px 14px; border-radius: 999px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  #status-dot { width: 9px; height: 9px; border-radius: 50%; background: #38d9a9;
+    box-shadow: 0 0 8px #38d9a9; animation: pulse 1.6s ease-in-out infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.35} }
+
+  #tooltip {
+    position: fixed; z-index: 20; pointer-events: none;
+    background: rgba(15,20,45,.92); color: #fff; font-size: 13px;
+    padding: 8px 12px; border-radius: 10px; max-width: 280px;
+    display: none; box-shadow: 0 6px 24px rgba(0,0,0,.35);
+  }
+  #tooltip b { display: block; margin-bottom: 2px; }
+
+  #hint {
+    position: fixed; bottom: 16px; right: 16px; z-index: 10;
+    color: rgba(255,255,255,.55); font-size: 11px; text-align: right;
+  }
+
+  #agent-panel {
+    position: fixed; top: 0; right: 0; bottom: 0; width: 320px; z-index: 30;
+    background: rgba(13,17,40,.96); backdrop-filter: blur(10px);
+    border-left: 1px solid rgba(255,255,255,.08);
+    display: flex; flex-direction: column;
+    transform: translateX(100%); transition: transform .25s ease;
+    font-family: -apple-system, "Segoe UI", sans-serif; color: #fff;
+  }
+  #agent-panel.open { transform: translateX(0); }
+  #ap-header {
+    padding: 16px; border-bottom: 1px solid rgba(255,255,255,.08);
+    display: flex; align-items: center; gap: 10px;
+  }
+  #ap-avatar { font-size: 28px; }
+  #ap-title { font-weight: 700; font-size: 15px; flex: 1; }
+  #ap-sub { font-size: 12px; opacity: .65; margin-top: 2px; }
+  #ap-close { background: none; border: none; color: #fff; font-size: 18px; cursor: pointer; opacity: .6; }
+  #ap-close:hover { opacity: 1; }
+  #ap-log { flex: 1; overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+  .ap-msg { font-size: 13px; line-height: 1.4; padding: 9px 12px; border-radius: 12px; max-width: 88%; }
+  .ap-msg.them { background: rgba(255,255,255,.08); align-self: flex-start; border-bottom-left-radius: 3px; }
+  .ap-msg.me { background: #4dabf7; color: #06132b; align-self: flex-end; border-bottom-right-radius: 3px; }
+  #ap-form { display: flex; gap: 8px; padding: 12px; border-top: 1px solid rgba(255,255,255,.08); }
+  #ap-input {
+    flex: 1; background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.12);
+    border-radius: 10px; padding: 8px 10px; color: #fff; font-size: 13px; outline: none;
+  }
+  #ap-send {
+    background: #51cf66; border: none; border-radius: 10px; padding: 0 14px;
+    font-weight: 700; cursor: pointer; color: #04321a;
+  }
+</style>
+</head>
+<body>
+<div id="canvas-holder"></div>
+
+<div id="hud">
+  <h1>🌈 Agents World</h1>
+  <p id="hud-sub">connecting to Ruflo…</p>
+</div>
+
+<div id="status-pill"><span id="status-dot"></span><span id="status-text">live</span></div>
+
+<div id="legend"></div>
+
+<div id="tooltip"></div>
+
+<div id="hint">drag to orbit · scroll to zoom · grab a worker to move them · click to talk</div>
+
+<div id="agent-panel">
+  <div id="ap-header">
+    <div id="ap-avatar">💻</div>
+    <div style="flex:1">
+      <div id="ap-title">—</div>
+      <div id="ap-sub">—</div>
+    </div>
+    <button id="ap-close">✕</button>
+  </div>
+  <div id="ap-log"></div>
+  <form id="ap-form">
+    <input id="ap-input" type="text" placeholder="Ask what they're working on…" autocomplete="off" />
+    <button id="ap-send" type="submit">Send</button>
+  </form>
+</div>
+
+<script src="/vendor/three.min.js"></script>
+<script src="/vendor/OrbitControls.js"></script>
+<script src="/world.js"></script>
+</body>
+</html>
