@@ -126,9 +126,9 @@ renderer.domElement.addEventListener("pointerdown", () => (controls.autoRotate =
   scene.add(sky);
 }
 
-scene.add(new THREE.HemisphereLight(0xcfd6c4, 0x44443a, 0.75));
-const sun = new THREE.DirectionalLight(0xffb870, 1.4);
-sun.position.set(-9, 12, 6); // warm sunlight from the left, matching the reference
+scene.add(new THREE.HemisphereLight(0xcfd6c4, 0x33332c, 0.5));
+const sun = new THREE.DirectionalLight(0xffaa5c, 1.75);
+sun.position.set(-9, 11, 7); // warm sunlight from the left, matching the reference
 sun.castShadow = true;
 sun.shadow.mapSize.set(2048, 2048);
 sun.shadow.camera.left = -16;
@@ -1593,11 +1593,49 @@ function makeMonitorStation() {
   return g;
 }
 
+// real wood-plank texture: horizontal boards + long grain streaks, not
+// just noise — this is what the workshop wall/beams were missing
+function makeWoodTexture(baseHex, plankCount = 6) {
+  const c = document.createElement("canvas");
+  c.width = c.height = 512;
+  const ctx = c.getContext("2d");
+  const base = "#" + baseHex.toString(16).padStart(6, "0");
+  ctx.fillStyle = base;
+  ctx.fillRect(0, 0, 512, 512);
+  const plankH = 512 / plankCount;
+  for (let p = 0; p < plankCount; p++) {
+    const y = p * plankH;
+    const shade = (Math.random() - 0.5) * 22;
+    ctx.fillStyle = `rgba(${shade > 0 ? 255 : 0},${shade > 0 ? 255 : 0},${shade > 0 ? 255 : 0},${Math.abs(shade) / 255})`;
+    ctx.fillRect(0, y, 512, plankH);
+    // long grain streaks along each plank
+    for (let i = 0; i < 14; i++) {
+      const gy = y + Math.random() * plankH;
+      ctx.strokeStyle = `rgba(20,12,4,${0.05 + Math.random() * 0.08})`;
+      ctx.lineWidth = 0.6 + Math.random() * 1.4;
+      ctx.beginPath();
+      ctx.moveTo(0, gy);
+      for (let x = 0; x <= 512; x += 32) ctx.lineTo(x, gy + (Math.random() - 0.5) * 4);
+      ctx.stroke();
+    }
+    // plank seam line
+    ctx.strokeStyle = "rgba(15,9,3,0.35)";
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    ctx.lineTo(512, y);
+    ctx.stroke();
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  return tex;
+}
+
 function buildWorkshopBackdrop() {
   // wood back wall behind the hub — the boards from your reference live here
-  const wallMat = new THREE.MeshStandardMaterial({
-    color: 0x5a4530, roughness: 0.85, map: makeGrainTexture(0x5a4530),
-  });
+  const woodTex = makeWoodTexture(0x5a4530, 8);
+  woodTex.repeat.set(2.2, 1);
+  const wallMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.8, map: woodTex });
   const wall = new THREE.Mesh(new THREE.BoxGeometry(9, 3.6, 0.12), wallMat);
   wall.position.set(0, 1.8, -3.3);
   wall.receiveShadow = true;
@@ -1641,6 +1679,139 @@ function buildWorkshopBackdrop() {
   router.position.set(-1.9, 0.85, 3.1);
   router.rotation.y = 0.35;
   worldRoot.add(router);
+
+  // the central collaborative workbench — bigger and busier than a task desk
+  const bench = makeCentralWorkbench();
+  bench.position.set(1.6, 0, 1.4);
+  bench.rotation.y = -0.5;
+  worldRoot.add(bench);
+
+  // scattered clutter — mugs, notebooks, small tools — so the room feels used
+  const clutterSpots = [
+    [-4.6, -1.3], [-3.0, -2.4], [2.6, -1.8], [4.0, 0.6], [0.6, 2.6], [-1.2, -3.2],
+  ];
+  for (const [x, z] of clutterSpots) {
+    const pick = Math.random();
+    let item;
+    if (pick < 0.34) item = makeMug();
+    else if (pick < 0.67) item = makeNotebookProp();
+    else item = makeToolProp();
+    item.position.set(x, 0, z);
+    item.rotation.y = Math.random() * Math.PI * 2;
+    worldRoot.add(item);
+  }
+}
+
+function makeMug() {
+  const g = new THREE.Group();
+  const body = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.06, 0.055, 0.09, 16),
+    new THREE.MeshStandardMaterial({ color: 0xd9c9a8, roughness: 0.5 })
+  );
+  body.position.y = 0.045;
+  body.castShadow = true;
+  g.add(body);
+  const handle = new THREE.Mesh(
+    new THREE.TorusGeometry(0.03, 0.008, 8, 12, Math.PI * 1.3),
+    new THREE.MeshStandardMaterial({ color: 0xd9c9a8, roughness: 0.5 })
+  );
+  handle.position.set(0.06, 0.045, 0);
+  handle.rotation.y = Math.PI / 2;
+  g.add(handle);
+  return g;
+}
+
+function makeNotebookProp() {
+  const g = new THREE.Group();
+  const book = new THREE.Mesh(
+    new THREE.BoxGeometry(0.16, 0.02, 0.2),
+    new THREE.MeshStandardMaterial({ color: 0xc9c2a8, roughness: 0.7 })
+  );
+  book.position.y = 0.01;
+  book.rotation.y = 0.15;
+  book.castShadow = true;
+  g.add(book);
+  const pen = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.006, 0.006, 0.14, 6),
+    new THREE.MeshStandardMaterial({ color: 0x2a2a28, roughness: 0.4 })
+  );
+  pen.rotation.z = Math.PI / 2.3;
+  pen.position.set(0.02, 0.03, 0.03);
+  g.add(pen);
+  return g;
+}
+
+function makeToolProp() {
+  const g = new THREE.Group();
+  const handle = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.012, 0.012, 0.16, 8),
+    new THREE.MeshStandardMaterial({ color: 0x6b4a2f, roughness: 0.7 })
+  );
+  handle.rotation.z = Math.PI / 2;
+  handle.position.y = 0.02;
+  handle.castShadow = true;
+  g.add(handle);
+  const head = new THREE.Mesh(
+    new THREE.BoxGeometry(0.04, 0.06, 0.02),
+    new THREE.MeshStandardMaterial({ color: 0x8a8478, roughness: 0.4, metalness: 0.5 })
+  );
+  head.position.set(-0.09, 0.02, 0);
+  g.add(head);
+  return g;
+}
+
+function makeCentralWorkbench() {
+  const g = new THREE.Group();
+  const woodTex = makeWoodTexture(0x7a5c3a, 4);
+  const topMat = new THREE.MeshStandardMaterial({ color: 0xffffff, map: woodTex, roughness: 0.7 });
+  const top = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.08, 0.7), topMat);
+  top.position.y = 0.42;
+  top.castShadow = true;
+  top.receiveShadow = true;
+  g.add(top);
+  for (const sx of [-1, 1]) {
+    for (const sz of [-1, 1]) {
+      const leg = new THREE.Mesh(
+        new THREE.BoxGeometry(0.06, 0.42, 0.06),
+        new THREE.MeshStandardMaterial({ color: 0x3a2a1a, roughness: 0.8 })
+      );
+      leg.position.set(sx * 0.62, 0.21, sz * 0.28);
+      g.add(leg);
+    }
+  }
+  // a low shelf underneath, with folders — busy/lived-in
+  const shelf = new THREE.Mesh(
+    new THREE.BoxGeometry(1.2, 0.03, 0.55),
+    new THREE.MeshStandardMaterial({ color: 0x3a2a1a, roughness: 0.8 })
+  );
+  shelf.position.y = 0.16;
+  g.add(shelf);
+
+  // things on top: a small monitor, mugs, notebooks, a tool — busy, not empty
+  const screenMat = new THREE.MeshBasicMaterial({ color: 0x7a9b5e });
+  const scr = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.2, 0.02), screenMat);
+  scr.position.set(-0.3, 0.62, -0.15);
+  scr.rotation.x = -0.15;
+  g.add(scr);
+  const scrStand = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.015, 0.015, 0.18, 8),
+    new THREE.MeshStandardMaterial({ color: 0x2a2a28 })
+  );
+  scrStand.position.set(-0.3, 0.5, -0.15);
+  g.add(scrStand);
+  for (const p of [[0.15, 0.1], [0.35, -0.1], [-0.05, 0.2]]) {
+    const m = makeMug();
+    m.position.set(p[0], 0.46, p[1]);
+    g.add(m);
+  }
+  const nb = makeNotebookProp();
+  nb.position.set(0.02, 0.46, -0.05);
+  g.add(nb);
+  const tool = makeToolProp();
+  tool.position.set(0.4, 0.46, 0.15);
+  g.add(tool);
+
+  return g;
 }
 buildWorkshopBackdrop();
 
