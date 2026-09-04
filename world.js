@@ -43,6 +43,24 @@ const ROBOT_VARIANTS = [
   { color: 0xa89a6e, face: "/assets/faces/moss_small.png" },
   { color: 0xc2ac86, face: "/assets/faces/cream_small.png" },
 ];
+// pick an icon that actually matches what the task is about — "visualize
+// each task" instead of one generic laptop badge for every task worker
+const TASK_KEYWORDS = [
+  [/python|script|extract/i, "🐍"],
+  [/godot|game|motif/i, "🎮"],
+  [/ui|panel|scene|screen/i, "🖼️"],
+  [/review|verify|audit/i, "🔍"],
+  [/doc|spec|write/i, "📝"],
+  [/test|qa/i, "🧪"],
+  [/build|assemble|extend|resource/i, "🔨"],
+  [/fix|bug|error/i, "🩹"],
+  [/data|memory|store/i, "🗄️"],
+  [/security|auth|policy/i, "🛡️"],
+];
+function taskBadge(description) {
+  for (const [re, icon] of TASK_KEYWORDS) if (re.test(description || "")) return icon;
+  return "⚙️";
+}
 const _faceTextureCache = new Map();
 const _textureLoader = new THREE.TextureLoader();
 function getFaceTexture(url) {
@@ -55,13 +73,13 @@ function variantIndexFor(id) {
   return h % ROBOT_VARIANTS.length;
 }
 
-// ---------- scene setup: a cozy warm-wood workshop, golden lamp light ----------
-const SKY_TOP = 0x3a2c22;
-const SKY_HORIZON = 0xd98f4e;
-const FOG_COLOR = 0x8a6144;
+// ---------- scene setup: a forest clearing at golden hour ----------
+const SKY_TOP = 0x1f3326;
+const SKY_HORIZON = 0xc9a15c;
+const FOG_COLOR = 0x5f6b4c;
 
 const scene = new THREE.Scene();
-scene.fog = new THREE.Fog(FOG_COLOR, 22, 50);
+scene.fog = new THREE.Fog(FOG_COLOR, 20, 46);
 
 const camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.1, 200);
 camera.position.set(0, 9.5, 13);
@@ -91,7 +109,7 @@ renderer.domElement.addEventListener("pointerdown", () => (controls.autoRotate =
   const ctx = c.getContext("2d");
   const grad = ctx.createLinearGradient(0, 0, 0, 512);
   grad.addColorStop(0, "#" + SKY_TOP.toString(16).padStart(6, "0"));
-  grad.addColorStop(0.55, "#b5623a");
+  grad.addColorStop(0.55, "#8a7a52");
   grad.addColorStop(1, "#" + SKY_HORIZON.toString(16).padStart(6, "0"));
   ctx.fillStyle = grad;
   ctx.fillRect(0, 0, 4, 512);
@@ -107,8 +125,8 @@ renderer.domElement.addEventListener("pointerdown", () => (controls.autoRotate =
   scene.add(sky);
 }
 
-scene.add(new THREE.HemisphereLight(0xffdca8, 0x4a3420, 0.9));
-const sun = new THREE.DirectionalLight(0xffcf8f, 1.15);
+scene.add(new THREE.HemisphereLight(0xd9e0c8, 0x4a4a3a, 0.95));
+const sun = new THREE.DirectionalLight(0xfff1d9, 1.05);
 sun.position.set(9, 14, 5);
 sun.castShadow = true;
 sun.shadow.mapSize.set(2048, 2048);
@@ -118,20 +136,20 @@ sun.shadow.camera.top = 16;
 sun.shadow.camera.bottom = -16;
 sun.shadow.bias = -0.0015;
 scene.add(sun);
-const fill = new THREE.DirectionalLight(0xff9d5c, 0.3);
+const fill = new THREE.DirectionalLight(0xcfe0c8, 0.35);
 fill.position.set(-10, 6, -8);
 scene.add(fill);
 
-// warm wood-plank workshop floor — no grid lines, no islands
+// neutral packed-earth/concrete factory floor — no grid lines, no orange
 {
   const c = document.createElement("canvas");
   c.width = c.height = 512;
   const ctx = c.getContext("2d");
-  ctx.fillStyle = "#8a6238";
+  ctx.fillStyle = "#6b6355";
   ctx.fillRect(0, 0, 512, 512);
   for (let i = 0; i < 3000; i++) {
     const shade = Math.random() < 0.5 ? 0 : 255;
-    ctx.fillStyle = `rgba(${shade},${shade < 128 ? 40 : 200},${shade < 128 ? 20 : 140},${Math.random() * 0.07})`;
+    ctx.fillStyle = `rgba(${shade},${shade},${shade},${Math.random() * 0.06})`;
     const s = 2 + Math.random() * 3;
     ctx.fillRect(Math.random() * 512, Math.random() * 512, s, s);
   }
@@ -140,7 +158,7 @@ scene.add(fill);
   tex.repeat.set(4, 4);
   const floor = new THREE.Mesh(
     new THREE.CircleGeometry(15, 64),
-    new THREE.MeshStandardMaterial({ map: tex, color: 0xffffff, roughness: 0.75 })
+    new THREE.MeshStandardMaterial({ map: tex, color: 0xffffff, roughness: 0.85 })
   );
   floor.rotation.x = -Math.PI / 2;
   floor.receiveShadow = true;
@@ -149,29 +167,11 @@ scene.add(fill);
   // soft warm vignette ring toward the edges, like a lamp-lit room fading to shadow
   const under = new THREE.Mesh(
     new THREE.RingGeometry(9.5, 15.4, 64),
-    new THREE.MeshStandardMaterial({ color: 0x4a3220, roughness: 0.9, transparent: true, opacity: 0.35 })
+    new THREE.MeshStandardMaterial({ color: 0x4a4a3a, roughness: 0.9, transparent: true, opacity: 0.35 })
   );
   under.rotation.x = -Math.PI / 2;
   under.position.y = -0.005;
   scene.add(under);
-}
-
-// warm floating dust-mote sparkle, lit like it's drifting through lamp light
-{
-  const N = 90;
-  const pos = new Float32Array(N * 3);
-  for (let i = 0; i < N; i++) {
-    pos[i * 3] = (Math.random() - 0.5) * 26;
-    pos[i * 3 + 1] = Math.random() * 6 + 0.5;
-    pos[i * 3 + 2] = (Math.random() - 0.5) * 26;
-  }
-  const motesGeo = new THREE.BufferGeometry();
-  motesGeo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
-  const motes = new THREE.Points(
-    motesGeo,
-    new THREE.PointsMaterial({ color: 0xffcf8a, size: 0.06, transparent: true, opacity: 0.6 })
-  );
-  scene.add(motes);
 }
 
 // warm string-lights arc — the cozy overhead touch from the reference photo
@@ -370,13 +370,13 @@ function makeWorker(statusColor, { scale = 1, badge = "💻", variantIndex = 0 }
 
   // the exact face from the reference art, on a round visor
   const visor = new THREE.Mesh(
-    new THREE.CircleGeometry(0.19, 28),
+    new THREE.CircleGeometry(0.25, 28),
     new THREE.MeshBasicMaterial({ map: getFaceTexture(variant.face), transparent: true })
   );
-  visor.position.set(0, 0.4, 0.29);
+  visor.position.set(0, 0.4, 0.3);
   g.add(visor);
-  const eyeLight = new THREE.PointLight(0xd8f6ff, 0.3, 1.2, 2);
-  eyeLight.position.set(0, 0.4, 0.4);
+  const eyeLight = new THREE.PointLight(0xd8f6ff, 0.6, 1.4, 2);
+  eyeLight.position.set(0, 0.4, 0.45);
   g.add(eyeLight);
 
   // little antenna — tip glows the worker's live status color
@@ -423,48 +423,89 @@ function makeWorker(statusColor, { scale = 1, badge = "💻", variantIndex = 0 }
 }
 
 // ---------- desk + laptop + papers: the literal work being done ----------
+// a little factory workstation: bench + spinning gear + andon stack light,
+// instead of a laptop — this is a shop floor, not an office
+function makeGear(radius, teeth, color) {
+  const g = new THREE.Group();
+  const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.4, metalness: 0.6 });
+  const hub = new THREE.Mesh(new THREE.CylinderGeometry(radius * 0.55, radius * 0.55, 0.04, 16), mat);
+  hub.rotation.x = Math.PI / 2;
+  g.add(hub);
+  for (let i = 0; i < teeth; i++) {
+    const a = (i / teeth) * Math.PI * 2;
+    const tooth = new THREE.Mesh(new THREE.BoxGeometry(radius * 0.32, radius * 0.32, 0.04), mat);
+    tooth.position.set(Math.cos(a) * radius * 0.75, Math.sin(a) * radius * 0.75, 0);
+    tooth.rotation.z = a;
+    g.add(tooth);
+  }
+  const bore = new THREE.Mesh(
+    new THREE.CylinderGeometry(radius * 0.18, radius * 0.18, 0.06, 12),
+    new THREE.MeshStandardMaterial({ color: 0x2a2a2a })
+  );
+  bore.rotation.x = Math.PI / 2;
+  g.add(bore);
+  return g;
+}
+
 function makeDesk(color) {
   const g = new THREE.Group();
-  const top = new THREE.Mesh(
-    new THREE.BoxGeometry(0.56, 0.05, 0.36),
-    new THREE.MeshStandardMaterial({ color: 0xd9c9a8, roughness: 0.7 })
+  const bench = new THREE.Mesh(
+    new THREE.BoxGeometry(0.6, 0.06, 0.4),
+    new THREE.MeshStandardMaterial({ color: 0x6b6459, roughness: 0.75, metalness: 0.15 })
   );
-  top.position.y = 0.3;
-  top.castShadow = true;
-  top.receiveShadow = true;
-  g.add(top);
+  bench.position.y = 0.32;
+  bench.castShadow = true;
+  bench.receiveShadow = true;
+  g.add(bench);
   for (const sx of [-1, 1]) {
     for (const sz of [-1, 1]) {
       const leg = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.02, 0.02, 0.3, 6),
-        new THREE.MeshStandardMaterial({ color: 0x8a7a5c })
+        new THREE.CylinderGeometry(0.025, 0.025, 0.32, 6),
+        new THREE.MeshStandardMaterial({ color: 0x3a3a3a, metalness: 0.5, roughness: 0.5 })
       );
-      leg.position.set(sx * 0.24, 0.15, sz * 0.14);
+      leg.position.set(sx * 0.25, 0.16, sz * 0.16);
       g.add(leg);
     }
   }
-  const laptopBase = new THREE.Mesh(
-    new THREE.BoxGeometry(0.24, 0.02, 0.17),
-    new THREE.MeshStandardMaterial({ color: 0x3a3f55 })
+
+  // the work itself: a big gear + a small one meshed together, spins while "running"
+  const gearBig = makeGear(0.14, 8, 0xb5aa8a);
+  gearBig.position.set(-0.08, 0.4, 0);
+  g.add(gearBig);
+  const gearSmall = makeGear(0.08, 6, 0x8f8578);
+  gearSmall.position.set(0.07, 0.4, 0.03);
+  g.add(gearSmall);
+
+  // andon stack light — the real factory way to show status at a glance
+  const pole = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.014, 0.014, 0.34, 6),
+    new THREE.MeshStandardMaterial({ color: 0x2a2a2a })
   );
-  laptopBase.position.set(-0.06, 0.335, 0.02);
-  g.add(laptopBase);
-  const screenMat = new THREE.MeshBasicMaterial({ color });
-  const screen = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.16, 0.015), screenMat);
-  screen.position.set(-0.06, 0.42, -0.065);
-  screen.rotation.x = -0.4;
-  g.add(screen);
-  // paper stack — "con papeles"
+  pole.position.set(0.2, 0.5, -0.1);
+  g.add(pole);
+  const bulbMat = new THREE.MeshBasicMaterial({ color });
+  const bulb = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.06, 10), bulbMat);
+  bulb.position.set(0.2, 0.7, -0.1);
+  g.add(bulb);
+  const stackLight = new THREE.PointLight(color, 0.4, 1, 2);
+  stackLight.position.copy(bulb.position);
+  g.add(stackLight);
+
+  // parts crate — "con papeles" becomes "con piezas"
   for (let i = 0; i < 3; i++) {
-    const paper = new THREE.Mesh(
-      new THREE.BoxGeometry(0.11, 0.006, 0.15),
-      new THREE.MeshStandardMaterial({ color: 0xffffff })
+    const part = new THREE.Mesh(
+      new THREE.BoxGeometry(0.05, 0.05, 0.05),
+      new THREE.MeshStandardMaterial({ color: 0xb5aa8a, metalness: 0.4, roughness: 0.5 })
     );
-    paper.position.set(0.17, 0.328 + i * 0.008, 0.05);
-    paper.rotation.y = (Math.random() - 0.5) * 0.35;
-    g.add(paper);
+    part.position.set(-0.2 + i * 0.06, 0.365, 0.13);
+    part.rotation.y = Math.random();
+    g.add(part);
   }
-  g.userData.screenMat = screenMat;
+
+  g.userData.screenMat = bulbMat;
+  g.userData.stackLight = stackLight;
+  g.userData.gearBig = gearBig;
+  g.userData.gearSmall = gearSmall;
   return g;
 }
 
@@ -637,7 +678,7 @@ function upsertWorker(id, { color, scale, labelText, status, badge, parentGroup,
   return entry;
 }
 
-function upsertDesk(id, { color, parentGroup, pos }) {
+function upsertDesk(id, { color, parentGroup, pos, spinning }) {
   let desk = desks.get(id);
   if (!desk) {
     const group = makeDesk(color);
@@ -650,6 +691,8 @@ function upsertDesk(id, { color, parentGroup, pos }) {
     parentGroup.add(desk.group);
   }
   desk.group.userData.screenMat.color.set(color);
+  desk.group.userData.stackLight.color.set(color);
+  desk.group.userData.spinning = spinning;
   desk.alive = true;
   return desk;
 }
@@ -766,7 +809,7 @@ async function syncState() {
         id: "task:" + t.id,
         kind: "task",
         status: t.status,
-        badge: AGENT_BADGE.default,
+        badge: taskBadge(t.description),
         label: `${statusIcon(t.status)} ${truncate(t.description, 22)}`,
         role: "task worker",
         task: t.description || "",
@@ -779,7 +822,8 @@ async function syncState() {
 
     items.forEach((it, ii) => {
       const local = positionOnCircle(ii, items.length, radius * 0.68);
-      upsertDesk(it.id, { color: statusColor(it.status), parentGroup: zone.group, pos: local });
+      const spinning = ["running", "in_progress", "active"].includes(it.status);
+      upsertDesk(it.id, { color: statusColor(it.status), parentGroup: zone.group, pos: local, spinning });
       const entry = upsertWorker(it.id, {
         color: statusColor(it.status),
         scale: it.scale,
@@ -1099,6 +1143,11 @@ function animate() {
       g.userData.spawnT = Math.min(1, g.userData.spawnT + dt * 2.4);
       g.scale.setScalar(Math.max(0.001, easeOutBack(g.userData.spawnT)));
     }
+    // the gears turn only while the real task is actually running —
+    // this IS the process, visualized
+    const spinSpeed = g.userData.spinning ? 3.2 : 0.15;
+    if (g.userData.gearBig) g.userData.gearBig.rotation.z += dt * spinSpeed;
+    if (g.userData.gearSmall) g.userData.gearSmall.rotation.z -= dt * spinSpeed * 1.6;
   }
   for (const [, zone] of zones) {
     const g = zone.group;
@@ -1310,11 +1359,11 @@ function plantForest() {
   forestFloor.receiveShadow = true;
   worldRoot.add(forestFloor);
 
-  const N = 90;
+  const N = 55;
   for (let i = 0; i < N; i++) {
     const ang = Math.random() * Math.PI * 2;
-    // denser the further out, but a few brave trees lean into the clearing edge too
-    const r = 8.2 + Math.pow(Math.random(), 0.6) * 20;
+    // pushed well back from the clearing so nothing blocks the view of the office
+    const r = 14 + Math.pow(Math.random(), 0.7) * 16;
     const scale = 0.8 + Math.random() * 1.1;
     const tree = makeTree(scale, Math.random() < 0.35);
     tree.position.set(Math.cos(ang) * r, 0, Math.sin(ang) * r);
