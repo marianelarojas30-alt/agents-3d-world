@@ -184,7 +184,7 @@ scene.add(fill);
   const c = document.createElement("canvas");
   c.width = c.height = 512;
   const ctx = c.getContext("2d");
-  ctx.fillStyle = "#7c8a9c";
+  ctx.fillStyle = "#16305c";
   ctx.fillRect(0, 0, 512, 512);
   for (let i = 0; i < 3000; i++) {
     const shade = Math.random() < 0.5 ? 0 : 255;
@@ -197,7 +197,7 @@ scene.add(fill);
   tex.repeat.set(4, 4);
   const floor = new THREE.Mesh(
     new THREE.CircleGeometry(15, 64),
-    new THREE.MeshStandardMaterial({ map: tex, color: 0xdfe6ec, roughness: 0.85 })
+    new THREE.MeshStandardMaterial({ map: tex, color: 0x3a5f9c, roughness: 0.7 })
   );
   floor.rotation.x = -Math.PI / 2;
   floor.receiveShadow = true;
@@ -666,13 +666,41 @@ function makeDesk(color) {
     }
   }
 
-  // the work itself: a big gear + a small one meshed together, spins while "running"
-  const gearBig = makeGear(0.14, 8, 0xb5aa8a);
-  gearBig.position.set(-0.08, 0.4, 0);
-  g.add(gearBig);
-  const gearSmall = makeGear(0.08, 6, 0x8f8578);
-  gearSmall.position.set(0.07, 0.4, 0.03);
-  g.add(gearSmall);
+  // the work itself, made tangible: a real sheet of paper being written on
+  // and stamped — a Wonka-factory metaphor for digital work, not a laptop
+  const paper = new THREE.Mesh(
+    new THREE.BoxGeometry(0.22, 0.006, 0.3),
+    new THREE.MeshStandardMaterial({ color: 0xfdfaf0, roughness: 0.8 })
+  );
+  paper.position.set(-0.02, 0.355, 0);
+  g.add(paper);
+  for (let i = 0; i < 4; i++) {
+    const line = new THREE.Mesh(
+      new THREE.BoxGeometry(0.15, 0.001, 0.006),
+      new THREE.MeshStandardMaterial({ color: 0x9aa0b0 })
+    );
+    line.position.set(-0.03, 0.359, -0.08 + i * 0.05);
+    g.add(line);
+  }
+  const penGroup = new THREE.Group();
+  const pen = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.008, 0.008, 0.16, 6),
+    new THREE.MeshStandardMaterial({ color: 0xe64980, roughness: 0.4 })
+  );
+  pen.rotation.x = Math.PI / 2.4;
+  pen.position.y = 0.06;
+  penGroup.add(pen);
+  penGroup.position.set(0.02, 0.4, 0);
+  g.add(penGroup);
+  const stampGroup = new THREE.Group();
+  const stampBody = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.035, 0.035, 0.06, 12),
+    new THREE.MeshStandardMaterial({ color: 0x2a2a28, roughness: 0.5 })
+  );
+  stampBody.position.y = 0.03;
+  stampGroup.add(stampBody);
+  stampGroup.position.set(-0.14, 0.45, 0.06);
+  g.add(stampGroup);
 
   // andon stack light — the real factory way to show status at a glance
   const pole = new THREE.Mesh(
@@ -689,21 +717,21 @@ function makeDesk(color) {
   stackLight.position.copy(bulb.position);
   g.add(stackLight);
 
-  // parts crate — "con papeles" becomes "con piezas"
+  // a small stack of finished papers — the physical "done" pile
   for (let i = 0; i < 3; i++) {
-    const part = new THREE.Mesh(
-      new THREE.BoxGeometry(0.05, 0.05, 0.05),
-      new THREE.MeshStandardMaterial({ color: 0xb5aa8a, metalness: 0.4, roughness: 0.5 })
+    const done = new THREE.Mesh(
+      new THREE.BoxGeometry(0.16, 0.005, 0.22),
+      new THREE.MeshStandardMaterial({ color: 0xfdfaf0, roughness: 0.8 })
     );
-    part.position.set(-0.2 + i * 0.06, 0.365, 0.13);
-    part.rotation.y = Math.random();
-    g.add(part);
+    done.position.set(0.2, 0.355 + i * 0.006, 0.13);
+    done.rotation.y = (Math.random() - 0.5) * 0.3;
+    g.add(done);
   }
 
   g.userData.screenMat = bulbMat;
   g.userData.stackLight = stackLight;
-  g.userData.gearBig = gearBig;
-  g.userData.gearSmall = gearSmall;
+  g.userData.penGroup = penGroup;
+  g.userData.stampGroup = stampGroup;
   return g;
 }
 
@@ -797,12 +825,6 @@ function ensureHub() {
   const lamp = makePendantLamp();
   lamp.position.set(0, 3.2, 0);
   hubGroup.add(lamp);
-
-  for (const p of [[-1.7, -0.6], [1.7, -0.7], [-1.2, 1.6], [1.4, 1.4]]) {
-    const plant = makePlant(0.9 + Math.random() * 0.3);
-    plant.position.set(p[0], 0, p[1]);
-    hubGroup.add(plant);
-  }
 
   worldRoot.add(hubGroup);
   spawnPop(hubGroup);
@@ -961,12 +983,6 @@ async function syncState() {
       const lamp = makePendantLamp();
       lamp.position.set(0, 3, 0);
       group.add(lamp);
-      for (let pi = 0; pi < 3; pi++) {
-        const ang = (pi / 3) * Math.PI * 2 + 0.6;
-        const plant = makePlant(0.8 + Math.random() * 0.3);
-        plant.position.set(Math.cos(ang) * radius * 1.05, 0, Math.sin(ang) * radius * 1.05);
-        group.add(plant);
-      }
 
       worldRoot.add(group);
       spawnPop(group);
@@ -1395,11 +1411,17 @@ function animate() {
       g.userData.spawnT = Math.min(1, g.userData.spawnT + dt * 2.4);
       g.scale.setScalar(Math.max(0.001, easeOutBack(g.userData.spawnT)));
     }
-    // the gears turn only while the real task is actually running —
-    // this IS the process, visualized
-    const spinSpeed = g.userData.spinning ? 3.2 : 0.15;
-    if (g.userData.gearBig) g.userData.gearBig.rotation.z += dt * spinSpeed;
-    if (g.userData.gearSmall) g.userData.gearSmall.rotation.z -= dt * spinSpeed * 1.6;
+    // the pen writes and the stamp comes down only while the real task is
+    // actually running — the tangible, paper version of "processing"
+    if (g.userData.spinning) {
+      const pen = g.userData.penGroup;
+      if (pen) {
+        pen.position.x = 0.02 + Math.sin(t * 6) * 0.05;
+        pen.position.z = Math.cos(t * 3) * 0.06;
+      }
+      const stamp = g.userData.stampGroup;
+      if (stamp) stamp.position.y = 0.45 - Math.max(0, Math.sin(t * 2.5)) * 0.08;
+    }
   }
   for (const [, zone] of zones) {
     const g = zone.group;
@@ -1759,7 +1781,8 @@ function makeCentralWorkbench() {
 
   return g;
 }
-buildWorkshopBackdrop();
+// (office furniture backdrop removed on request — the floor stays clean,
+// only the data-driven hub/zones/desks remain)
 
 // ---------- the forest — the office sits in a clearing inside it ----------
 function makeTree(scale = 1, pine = false) {

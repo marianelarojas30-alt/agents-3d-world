@@ -1,0 +1,18 @@
+{
+  "tasks": {
+    "task-1788547983880-2p3i5c": {
+      "taskId": "task-1788547983880-2p3i5c",
+      "type": "implementation",
+      "description": "Demo: verify Agents World shows this task live",
+      "priority": "normal",
+      "status": "pending",
+      "progress": 0,
+      "assignedTo": [],
+      "tags": [],
+      "createdAt": "2026-09-04T18:53:03.880Z",
+      "startedAt": null,
+      "completedAt": null
+    }
+  },
+  "version": "3.0.0"
+}
