@@ -35,14 +35,15 @@ const AGENT_BADGE = {
 
 // the exact characters from the reference art — body color + cropped real face
 // cream / copper / gray / muted-green only, per spec — no blue/purple
+// cute, saturated colors — like the very first version, not worn metal
 const ROBOT_VARIANTS = [
-  { color: 0x8c877e, face: "/assets/faces/purple_editor.png" },
-  { color: 0x6f8a52, face: "/assets/faces/moss_laptop.png" },
-  { color: 0xc08a4e, face: "/assets/faces/copper_writer.png" },
-  { color: 0xd4c9ad, face: "/assets/faces/cream_box.png" },
-  { color: 0x9a958a, face: "/assets/faces/blue_small.png" },
-  { color: 0x8a9270, face: "/assets/faces/moss_small.png" },
-  { color: 0xc2ac86, face: "/assets/faces/cream_small.png" },
+  { color: 0xc9a6e0, face: "/assets/faces/purple_editor.png" },
+  { color: 0x7fd9a0, face: "/assets/faces/moss_laptop.png" },
+  { color: 0xffb463, face: "/assets/faces/copper_writer.png" },
+  { color: 0xfff1cf, face: "/assets/faces/cream_box.png" },
+  { color: 0x7ec8f2, face: "/assets/faces/blue_small.png" },
+  { color: 0xa8e07a, face: "/assets/faces/moss_small.png" },
+  { color: 0xffcfa3, face: "/assets/faces/cream_small.png" },
 ];
 // pick an icon that actually matches what the task is about — "visualize
 // each task" instead of one generic laptop badge for every task worker
@@ -75,9 +76,10 @@ function variantIndexFor(id) {
 }
 
 // ---------- scene setup: a forest clearing at golden hour ----------
-const SKY_TOP = 0x1f3326;
-const SKY_HORIZON = 0xc9a15c;
-const FOG_COLOR = 0x5f6b4c;
+// blue cute world, like the very first version — bright sky, not workshop-brown
+const SKY_TOP = 0x2f7fd9;
+const SKY_HORIZON = 0xbfe3ff;
+const FOG_COLOR = 0xcfe9ff;
 
 const scene = new THREE.Scene();
 scene.fog = new THREE.Fog(FOG_COLOR, 20, 46);
@@ -110,7 +112,7 @@ renderer.domElement.addEventListener("pointerdown", () => (controls.autoRotate =
   const ctx = c.getContext("2d");
   const grad = ctx.createLinearGradient(0, 0, 0, 512);
   grad.addColorStop(0, "#" + SKY_TOP.toString(16).padStart(6, "0"));
-  grad.addColorStop(0.55, "#8a7a52");
+  grad.addColorStop(0.55, "#6fb3e8");
   grad.addColorStop(1, "#" + SKY_HORIZON.toString(16).padStart(6, "0"));
   ctx.fillStyle = grad;
   ctx.fillRect(0, 0, 4, 512);
@@ -126,8 +128,8 @@ renderer.domElement.addEventListener("pointerdown", () => (controls.autoRotate =
   scene.add(sky);
 }
 
-scene.add(new THREE.HemisphereLight(0xcfd6c4, 0x3a4048, 0.55));
-const sun = new THREE.DirectionalLight(0xffaa5c, 1.75);
+scene.add(new THREE.HemisphereLight(0xeaf6ff, 0x6a8faa, 1.0));
+const sun = new THREE.DirectionalLight(0xfff6e0, 1.3);
 sun.position.set(-9, 11, 7); // warm sunlight from the left, matching the reference
 sun.castShadow = true;
 sun.shadow.mapSize.set(2048, 2048);
@@ -137,7 +139,7 @@ sun.shadow.camera.top = 16;
 sun.shadow.camera.bottom = -16;
 sun.shadow.bias = -0.0015;
 scene.add(sun);
-const fill = new THREE.DirectionalLight(0x6f92c4, 0.75);
+const fill = new THREE.DirectionalLight(0xbfe0ff, 0.4);
 fill.position.set(-10, 6, -8);
 scene.add(fill);
 
@@ -452,13 +454,9 @@ function makeWorker(statusColor, { scale = 1, badge = "💻", variantIndex = 0 }
   const g = new THREE.Group();
   const variant = ROBOT_VARIANTS[variantIndex % ROBOT_VARIANTS.length];
   const color = variant.color;
-  // every worker gets a slightly different finish — matte, satin, or metallic —
-  // worn painted metal, semi-gloss, so a room full of them still reads as
-  // "all different" the way the reference workshop shot does
-  const metalness = 0.25 + Math.random() * 0.25;
-  const roughness = 0.55 - metalness * 0.2 + Math.random() * 0.1;
+  // cute glossy toy finish — clean and bright, not weathered metal
   const mainMat = new THREE.MeshPhysicalMaterial({
-    color, roughness, metalness, map: makeGrainTexture(color), clearcoat: 0.15, clearcoatRoughness: 0.6,
+    color, roughness: 0.35, metalness: 0.05, clearcoat: 0.5, clearcoatRoughness: 0.25,
   });
 
   // small compact body, rounded (not a hard box) — the head is the star
