@@ -47,8 +47,8 @@ for _extra in ("/usr/local/bin", "/opt/homebrew/bin", os.path.join(HOME, ".npm-g
 
 # Cute, saturated palette per team — assigned deterministically by name hash
 PALETTE = [
-    "#ff6b6b", "#ffa94d", "#ffd43b", "#69db7c", "#38d9a9",
-    "#4dabf7", "#748ffc", "#da77f2", "#f783ac", "#ff8787",
+    "#c96b4f", "#c08a4e", "#d9a441", "#7a9b5e", "#5c8a78",
+    "#5b7a8c", "#6f7a9e", "#8f6d97", "#a8445a", "#b06a5a",
 ]
 
 

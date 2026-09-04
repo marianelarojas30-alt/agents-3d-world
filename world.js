@@ -5,16 +5,16 @@
 const POLL_MS = 2500;
 
 const STATUS_COLOR = {
-  pending: 0xffd43b,
-  queued: 0xffd43b,
-  running: 0xff6b6b,
-  in_progress: 0xff6b6b,
-  active: 0xff6b6b,
-  completed: 0x51cf66,
-  done: 0x51cf66,
-  failed: 0xe64980,
-  error: 0xe64980,
-  idle: 0x4dabf7,
+  pending: 0xd9a441,
+  queued: 0xd9a441,
+  running: 0xc96b4f,
+  in_progress: 0xc96b4f,
+  active: 0xc96b4f,
+  completed: 0x7a9b5e,
+  done: 0x7a9b5e,
+  failed: 0xa8445a,
+  error: 0xa8445a,
+  idle: 0x5b7a8c,
 };
 const STATUS_ICON = {
   pending: "⏳", queued: "⏳", running: "⌨️", in_progress: "⌨️", active: "⌨️",
@@ -35,13 +35,13 @@ const AGENT_BADGE = {
 
 // the exact characters from the reference art — body color + cropped real face
 const ROBOT_VARIANTS = [
-  { color: 0xa89fc2, face: "/assets/faces/purple_editor.png" },
-  { color: 0x7f9a5c, face: "/assets/faces/moss_laptop.png" },
-  { color: 0xc99658, face: "/assets/faces/copper_writer.png" },
-  { color: 0xd9d2c0, face: "/assets/faces/cream_box.png" },
-  { color: 0x3f7a94, face: "/assets/faces/blue_small.png" },
-  { color: 0xc7c3a0, face: "/assets/faces/moss_small.png" },
-  { color: 0xcfc7b8, face: "/assets/faces/cream_small.png" },
+  { color: 0x8f8397, face: "/assets/faces/purple_editor.png" },
+  { color: 0x6f8a52, face: "/assets/faces/moss_laptop.png" },
+  { color: 0xc08a4e, face: "/assets/faces/copper_writer.png" },
+  { color: 0xd4c9ad, face: "/assets/faces/cream_box.png" },
+  { color: 0x3a565c, face: "/assets/faces/blue_small.png" },
+  { color: 0xa89a6e, face: "/assets/faces/moss_small.png" },
+  { color: 0xc2ac86, face: "/assets/faces/cream_small.png" },
 ];
 const _faceTextureCache = new Map();
 const _textureLoader = new THREE.TextureLoader();
@@ -518,16 +518,16 @@ function saveOffsets() {
 
 // ---------- moods: how each status literally behaves ----------
 const MOODS = {
-  pending: { typing: false, radius: 0.3, speed: 0.35, legSwing: 0.35, bodyBob: 0.03, tilt: 0 },
-  queued: { typing: false, radius: 0.3, speed: 0.35, legSwing: 0.35, bodyBob: 0.03, tilt: 0 },
-  idle: { typing: false, radius: 0.3, speed: 0.35, legSwing: 0.35, bodyBob: 0.03, tilt: 0 },
+  pending: { typing: false, radius: 1.1, speed: 0.75, legSwing: 0.55, bodyBob: 0.06, tilt: 0 },
+  queued: { typing: false, radius: 1.1, speed: 0.75, legSwing: 0.55, bodyBob: 0.06, tilt: 0 },
+  idle: { typing: false, radius: 1.1, speed: 0.75, legSwing: 0.55, bodyBob: 0.06, tilt: 0 },
   running: { typing: true },
   in_progress: { typing: true },
   active: { typing: true },
-  completed: { typing: false, radius: 0.45, speed: 0.6, legSwing: 0.45, bodyBob: 0.05, tilt: 0 },
-  done: { typing: false, radius: 0.45, speed: 0.6, legSwing: 0.45, bodyBob: 0.05, tilt: 0 },
-  failed: { typing: false, radius: 0.06, speed: 0.1, legSwing: 0.08, bodyBob: 0.004, tilt: -0.35 },
-  error: { typing: false, radius: 0.06, speed: 0.1, legSwing: 0.08, bodyBob: 0.004, tilt: -0.35 },
+  completed: { typing: false, radius: 1.5, speed: 0.95, legSwing: 0.6, bodyBob: 0.07, tilt: 0 },
+  done: { typing: false, radius: 1.5, speed: 0.95, legSwing: 0.6, bodyBob: 0.07, tilt: 0 },
+  failed: { typing: false, radius: 0.4, speed: 0.3, legSwing: 0.25, bodyBob: 0.02, tilt: -0.35 },
+  error: { typing: false, radius: 0.4, speed: 0.3, legSwing: 0.25, bodyBob: 0.02, tilt: -0.35 },
 };
 
 // ---------- entity registries ----------
@@ -543,9 +543,9 @@ const workerNodes = new Map();
 function ensureHub() {
   if (hubGroup) return hubGroup;
   hubGroup = new THREE.Group();
-  hubGroup.add(makeRug(2.4, "#ffd43b"));
+  hubGroup.add(makeRug(2.4, "#d9a441"));
 
-  hubMascot = makeWorker(0xffd43b, { scale: 1.5, badge: "👑", variantIndex: variantIndexFor("hub") });
+  hubMascot = makeWorker(0xd9a441, { scale: 1.5, badge: "👑", variantIndex: variantIndexFor("hub") });
   hubMascot.position.set(0, 0.72, 0);
   hubGroup.userData.baseY = 0.72;
   hubGroup.add(hubMascot);
@@ -685,7 +685,7 @@ async function syncState() {
       const id = "worker:" + w.name;
       let node = workerNodes.get(id);
       if (!node) {
-        const wg = makeWorker(0x4dabf7, { scale: 0.6, badge: WORKER_ICON[w.name] || "🐣", variantIndex: variantIndexFor(id) });
+        const wg = makeWorker(0x5b7a8c, { scale: 0.6, badge: WORKER_ICON[w.name] || "🐣", variantIndex: variantIndexFor(id) });
         const lbl = makeLabel(w.name, { size: 18 });
         lbl.position.set(0, 0.9, 0);
         wg.add(lbl);
@@ -705,7 +705,7 @@ async function syncState() {
       }
       node.group.userData.baseY = 0.29;
       node.group.userData.mood = w.isRunning ? MOODS.running : MOODS.idle;
-      const wColor = w.isRunning ? 0x51cf66 : 0x4dabf7;
+      const wColor = w.isRunning ? 0x7a9b5e : 0x5b7a8c;
       node.group.userData.antennaMat.color.set(wColor);
       node.group.userData.antennaMat.emissive.set(wColor);
       i++;
@@ -1162,13 +1162,17 @@ function animateWorker(g, mood, t, dt, baseY) {
   const armL = g.userData.armL, armR = g.userData.armR, legL = g.userData.legL, legR = g.userData.legR;
 
   if (mood.typing) {
-    const tf = Math.sin(t * 9 + phase);
+    // a little burst of typing, then a pause to "think" — reads as human, not a metronome
+    const cycle = (t * 0.6 + phase) % (Math.PI * 2);
+    const typingNow = cycle < Math.PI * 1.3;
+    const tf = typingNow ? Math.sin(t * 10 + phase) : 0;
     if (armL) armL.rotation.x = -0.4 + tf * 0.3;
     if (armR) armR.rotation.x = -0.4 - tf * 0.3;
     if (legL) legL.rotation.x = 0;
     if (legR) legR.rotation.x = 0;
-    g.position.y = baseY + Math.abs(Math.sin(t * 4 + phase)) * 0.008;
-    g.rotation.z = 0;
+    g.position.y = baseY + Math.abs(Math.sin(t * 4 + phase)) * (typingNow ? 0.008 : 0.02);
+    g.rotation.z = Math.sin(t * 0.4 + phase) * 0.03;
+    g.rotation.x = typingNow ? 0.03 : -0.02;
   } else {
     const wb = g.userData.walkBlend;
     const swing = Math.sin(t * 7 + phase) * mood.legSwing * wb;
@@ -1178,6 +1182,7 @@ function animateWorker(g, mood, t, dt, baseY) {
     if (armR) armR.rotation.x = swing * 0.8;
     g.position.y = baseY + Math.abs(Math.sin(t * 7 + phase)) * mood.bodyBob * wb + Math.sin(t * 1.5 + phase) * 0.01;
     g.rotation.z = mood.tilt;
+    g.rotation.x = 0;
   }
 }
 
@@ -1200,7 +1205,7 @@ function makeBookshelf() {
   frame.position.y = 0.55;
   frame.castShadow = true;
   g.add(frame);
-  const folderColors = [0xff6b6b, 0xffd43b, 0x51cf66, 0x4dabf7, 0xda77f2];
+  const folderColors = [0xa8445a, 0xd9a441, 0x7a9b5e, 0x5b7a8c, 0x8f8397];
   for (let shelf = 0; shelf < 3; shelf++) {
     for (let i = 0; i < 4; i++) {
       const folder = new THREE.Mesh(
@@ -1238,7 +1243,7 @@ function scatterAmbientDecor() {
     () => makePlant(1 + Math.random() * 0.4),
     () => makePlant(0.7 + Math.random() * 0.3),
     () => makeBookshelf(),
-    () => makeSofa([0x748ffc, 0xff8fa3, 0x69db7c, 0xffa94d][Math.floor(Math.random() * 4)]),
+    () => makeSofa([0x5b7a8c, 0xa8445a, 0x7a9b5e, 0xc08a4e][Math.floor(Math.random() * 4)]),
   ];
   const count = 14;
   for (let i = 0; i < count; i++) {
@@ -1264,7 +1269,7 @@ function makeTree(scale = 1, pine = false) {
   trunk.castShadow = true;
   g.add(trunk);
 
-  const greens = [0x3f7a3e, 0x4d8f4a, 0x5aa155, 0x386b3a];
+  const greens = [0x5a6b3f, 0x6b7a4a, 0x4f5c38, 0x7a8a52];
   const leafMat = () => new THREE.MeshStandardMaterial({
     color: greens[Math.floor(Math.random() * greens.length)], roughness: 0.85,
   });
