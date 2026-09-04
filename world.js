@@ -148,7 +148,7 @@ scene.add(fill);
   const c = document.createElement("canvas");
   c.width = c.height = 512;
   const ctx = c.getContext("2d");
-  ctx.fillStyle = "#82817c";
+  ctx.fillStyle = "#7c8a9c";
   ctx.fillRect(0, 0, 512, 512);
   for (let i = 0; i < 3000; i++) {
     const shade = Math.random() < 0.5 ? 0 : 255;
@@ -161,7 +161,7 @@ scene.add(fill);
   tex.repeat.set(4, 4);
   const floor = new THREE.Mesh(
     new THREE.CircleGeometry(15, 64),
-    new THREE.MeshStandardMaterial({ map: tex, color: 0xffffff, roughness: 0.85 })
+    new THREE.MeshStandardMaterial({ map: tex, color: 0xdfe6ec, roughness: 0.85 })
   );
   floor.rotation.x = -Math.PI / 2;
   floor.receiveShadow = true;
@@ -1565,34 +1565,8 @@ function makeSofa(color) {
 }
 
 function scatterAmbientDecor() {
-  const ringMin = 6.6, ringMax = 8.6;
-  const decorMakers = [
-    () => makePlant(1 + Math.random() * 0.4),
-    () => makePlant(0.7 + Math.random() * 0.3),
-    () => makePlant(1.1 + Math.random() * 0.5),
-    () => makeBookshelf(),
-    () => makeSofa([0x5b7a8c, 0xa8445a, 0x7a9b5e, 0xc08a4e][Math.floor(Math.random() * 4)]),
-  ];
-  const count = 16;
-  for (let i = 0; i < count; i++) {
-    const ang = (i / count) * Math.PI * 2 + Math.random() * 0.3;
-    const r = ringMin + Math.random() * (ringMax - ringMin);
-    const item = decorMakers[i % decorMakers.length]();
-    item.position.set(Math.cos(ang) * r, 0, Math.sin(ang) * r);
-    item.rotation.y = Math.random() * Math.PI * 2;
-    worldRoot.add(item);
-  }
-
-  // ferns everywhere, thick along the floor — Chocó/Darién jungle-humid,
-  // not a couple of stray potted plants
-  for (let i = 0; i < 55; i++) {
-    const ang = Math.random() * Math.PI * 2;
-    const r = 3.2 + Math.random() * 11.5;
-    const fern = makeFern(0.6 + Math.random() * 0.9);
-    fern.position.set(Math.cos(ang) * r, 0, Math.sin(ang) * r);
-    fern.rotation.y = Math.random() * Math.PI * 2;
-    worldRoot.add(fern);
-  }
+  // kept clean and empty on purpose — no plants, no furniture clutter.
+  // the robots and their work are the whole point, nothing competes with them.
 }
 scatterAmbientDecor();
 
