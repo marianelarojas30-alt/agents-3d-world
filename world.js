@@ -34,13 +34,14 @@ const AGENT_BADGE = {
 };
 
 // the exact characters from the reference art — body color + cropped real face
+// cream / copper / gray / muted-green only, per spec — no blue/purple
 const ROBOT_VARIANTS = [
-  { color: 0x8f8397, face: "/assets/faces/purple_editor.png" },
+  { color: 0x8c877e, face: "/assets/faces/purple_editor.png" },
   { color: 0x6f8a52, face: "/assets/faces/moss_laptop.png" },
   { color: 0xc08a4e, face: "/assets/faces/copper_writer.png" },
   { color: 0xd4c9ad, face: "/assets/faces/cream_box.png" },
-  { color: 0x3a565c, face: "/assets/faces/blue_small.png" },
-  { color: 0xa89a6e, face: "/assets/faces/moss_small.png" },
+  { color: 0x9a958a, face: "/assets/faces/blue_small.png" },
+  { color: 0x8a9270, face: "/assets/faces/moss_small.png" },
   { color: 0xc2ac86, face: "/assets/faces/cream_small.png" },
 ];
 // pick an icon that actually matches what the task is about — "visualize
@@ -82,7 +83,7 @@ const scene = new THREE.Scene();
 scene.fog = new THREE.Fog(FOG_COLOR, 20, 46);
 
 const camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.1, 200);
-camera.position.set(0, 9.5, 13);
+camera.position.set(3.2, 3.4, 7.6); // three-quarter workbench-level framing, like the reference
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(innerWidth, innerHeight);
@@ -92,7 +93,7 @@ renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 document.getElementById("canvas-holder").appendChild(renderer.domElement);
 
 const controls = new THREE.OrbitControls(camera, renderer.domElement);
-controls.target.set(0, 0.6, 0);
+controls.target.set(0, 1.1, -0.5);
 controls.enableDamping = true;
 controls.dampingFactor = 0.08;
 controls.minDistance = 3;
@@ -125,9 +126,9 @@ renderer.domElement.addEventListener("pointerdown", () => (controls.autoRotate =
   scene.add(sky);
 }
 
-scene.add(new THREE.HemisphereLight(0xd9e0c8, 0x4a4a3a, 0.95));
-const sun = new THREE.DirectionalLight(0xfff1d9, 1.05);
-sun.position.set(9, 14, 5);
+scene.add(new THREE.HemisphereLight(0xcfd6c4, 0x44443a, 0.75));
+const sun = new THREE.DirectionalLight(0xffb870, 1.4);
+sun.position.set(-9, 12, 6); // warm sunlight from the left, matching the reference
 sun.castShadow = true;
 sun.shadow.mapSize.set(2048, 2048);
 sun.shadow.camera.left = -16;
@@ -136,7 +137,7 @@ sun.shadow.camera.top = 16;
 sun.shadow.camera.bottom = -16;
 sun.shadow.bias = -0.0015;
 scene.add(sun);
-const fill = new THREE.DirectionalLight(0xcfe0c8, 0.35);
+const fill = new THREE.DirectionalLight(0x5f7ea0, 0.45);
 fill.position.set(-10, 6, -8);
 scene.add(fill);
 
@@ -193,6 +194,40 @@ function makeStringLights(radius, count) {
     bulb.position.y -= 0.03;
     g.add(bulb);
   }
+  return g;
+}
+
+// a background service (like ruflo's daemon workers) is infrastructure,
+// not a person — render it as a small server unit with a status LED,
+// never animated as if it were doing hands-on work
+function makeMachine(scale = 1) {
+  const g = new THREE.Group();
+  const bodyMat = new THREE.MeshStandardMaterial({ color: 0x3a3d42, roughness: 0.5, metalness: 0.6 });
+  const body = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.4, 0.28), bodyMat);
+  body.position.y = 0.2;
+  body.castShadow = true;
+  g.add(body);
+  for (let i = 0; i < 3; i++) {
+    const slot = new THREE.Mesh(
+      new THREE.BoxGeometry(0.28, 0.05, 0.01),
+      new THREE.MeshStandardMaterial({ color: 0x22242a, roughness: 0.6 })
+    );
+    slot.position.set(0, 0.1 + i * 0.1, 0.145);
+    g.add(slot);
+  }
+  const ledMat = new THREE.MeshBasicMaterial({ color: 0x5b7a8c });
+  const led = new THREE.Mesh(new THREE.SphereGeometry(0.025, 8, 8), ledMat);
+  led.position.set(0.11, 0.33, 0.145);
+  g.add(led);
+  const antenna = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.008, 0.008, 0.12, 6),
+    new THREE.MeshStandardMaterial({ color: 0x6a6d72 })
+  );
+  antenna.position.set(-0.08, 0.46, 0);
+  g.add(antenna);
+  g.userData.ledMat = ledMat;
+  g.userData.ledMesh = led;
+  g.scale.setScalar(scale);
   return g;
 }
 
@@ -311,20 +346,47 @@ function toHex(n) { return "#" + n.toString(16).padStart(6, "0"); }
 
 // ---------- robot-worker factory (hands, feet, all a little different) ----------
 function makeLimb(length, thickness, endRadius, color, endColor) {
+  // stubby + visibly articulated: a ball joint at the shoulder/hip, a short
+  // thick segment, a ball joint at the elbow/knee, then the hand/foot
   const pivot = new THREE.Group();
-  const cyl = new THREE.Mesh(
-    new THREE.CylinderGeometry(thickness, thickness * 0.85, length, 8),
-    new THREE.MeshStandardMaterial({ color, roughness: 0.5 })
+  const jointMat = new THREE.MeshStandardMaterial({ color, roughness: 0.45, metalness: 0.35 });
+  const segMat = new THREE.MeshStandardMaterial({ color, roughness: 0.55, metalness: 0.25 });
+
+  const shoulder = new THREE.Mesh(new THREE.SphereGeometry(thickness * 1.35, 12, 10), jointMat);
+  shoulder.castShadow = true;
+  pivot.add(shoulder);
+
+  const seg = new THREE.Mesh(
+    new THREE.CylinderGeometry(thickness, thickness * 0.92, length * 0.62, 8),
+    segMat
   );
-  cyl.position.y = -length / 2;
-  cyl.castShadow = true;
-  pivot.add(cyl);
+  seg.position.y = -length * 0.34;
+  seg.castShadow = true;
+  pivot.add(seg);
+
+  const elbow = new THREE.Mesh(new THREE.SphereGeometry(thickness * 1.1, 10, 8), jointMat);
+  elbow.position.y = -length * 0.62;
+  elbow.castShadow = true;
+  pivot.add(elbow);
+
   const end = new THREE.Mesh(
-    new THREE.SphereGeometry(endRadius, 10, 10),
-    new THREE.MeshStandardMaterial({ color: endColor, roughness: 0.5 })
+    new THREE.SphereGeometry(endRadius, 12, 10),
+    new THREE.MeshStandardMaterial({ color: endColor, roughness: 0.4, metalness: 0.15 })
   );
-  end.position.y = -length;
+  end.position.y = -length * 0.62 - endRadius * 0.9;
+  end.scale.set(1, 0.85, 1);
+  end.castShadow = true;
   pivot.add(end);
+
+  // a bolt on the shoulder cap — the "handmade" detail
+  const bolt = new THREE.Mesh(
+    new THREE.CylinderGeometry(thickness * 0.28, thickness * 0.28, 0.012, 8),
+    new THREE.MeshStandardMaterial({ color: 0x2a2a28, roughness: 0.4, metalness: 0.6 })
+  );
+  bolt.rotation.x = Math.PI / 2;
+  bolt.position.z = thickness * 1.2;
+  pivot.add(bolt);
+
   return pivot;
 }
 
@@ -350,42 +412,96 @@ function makeWorker(statusColor, { scale = 1, badge = "💻", variantIndex = 0 }
   const variant = ROBOT_VARIANTS[variantIndex % ROBOT_VARIANTS.length];
   const color = variant.color;
   // every worker gets a slightly different finish — matte, satin, or metallic —
-  // so a room full of them still reads as "all different", like a real workshop
-  const metalness = 0.05 + Math.random() * 0.45;
-  const roughness = 0.75 - metalness * 0.5 + Math.random() * 0.1;
-  const mainMat = new THREE.MeshStandardMaterial({
-    color, roughness, metalness, map: makeGrainTexture(color),
+  // worn painted metal, semi-gloss, so a room full of them still reads as
+  // "all different" the way the reference workshop shot does
+  const metalness = 0.25 + Math.random() * 0.25;
+  const roughness = 0.55 - metalness * 0.2 + Math.random() * 0.1;
+  const mainMat = new THREE.MeshPhysicalMaterial({
+    color, roughness, metalness, map: makeGrainTexture(color), clearcoat: 0.15, clearcoatRoughness: 0.6,
   });
 
-  const torso = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.3, 0.28), mainMat);
-  torso.position.y = -0.04;
+  // small compact body, rounded (not a hard box) — the head is the star
+  const torso = new THREE.Mesh(new THREE.SphereGeometry(0.24, 20, 16), mainMat);
+  torso.scale.set(1, 0.82, 0.86);
+  torso.position.y = -0.12;
   torso.castShadow = true;
   g.add(torso);
+  // chest seam + bolts — the handmade detail the reference is full of
+  const seam = new THREE.Mesh(
+    new THREE.TorusGeometry(0.22, 0.006, 6, 24),
+    new THREE.MeshStandardMaterial({ color: 0x2a2a28, roughness: 0.5, metalness: 0.5 })
+  );
+  seam.rotation.x = Math.PI / 2;
+  seam.position.y = -0.02;
+  seam.scale.set(1, 0.86, 1);
+  g.add(seam);
+  for (const side of [-1, 1]) {
+    const bolt = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.02, 0.02, 0.012, 8),
+      new THREE.MeshStandardMaterial({ color: 0x2a2a28, roughness: 0.4, metalness: 0.6 })
+    );
+    bolt.rotation.x = Math.PI / 2;
+    bolt.position.set(side * 0.14, -0.02, 0.19);
+    g.add(bolt);
+  }
 
-  // big bobble-head — the round glowing-eye face is the focal point
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.32, 22, 18), mainMat);
-  head.position.y = 0.38;
+  // oversized rounded head — the focal point, like the reference
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.4, 26, 20), mainMat);
+  head.position.y = 0.32;
   head.castShadow = true;
   g.add(head);
+  // neck seam ring
+  const neckSeam = new THREE.Mesh(
+    new THREE.TorusGeometry(0.19, 0.008, 6, 20),
+    new THREE.MeshStandardMaterial({ color: 0x2a2a28, roughness: 0.5, metalness: 0.5 })
+  );
+  neckSeam.rotation.x = Math.PI / 2;
+  neckSeam.position.y = 0.02;
+  g.add(neckSeam);
 
-  // two big glowing eyes — reads as a face at a glance, more than one visor does
+  // glossy black face screen with a raised metal bezel, flush with the
+  // head surface (true geometric recession isn't possible without CSG,
+  // so the bezel ring + dark screen + bright eyes sell the "inset" look)
+  const bezel = new THREE.Mesh(
+    new THREE.CircleGeometry(0.26, 28),
+    new THREE.MeshStandardMaterial({ color: 0x9a9488, roughness: 0.45, metalness: 0.4 })
+  );
+  bezel.position.set(0, 0.33, 0.393);
+  g.add(bezel);
+  const screen = new THREE.Mesh(
+    new THREE.CircleGeometry(0.225, 28),
+    new THREE.MeshPhysicalMaterial({
+      color: 0x07080d, roughness: 0.12, metalness: 0.1, clearcoat: 1, clearcoatRoughness: 0.08,
+    })
+  );
+  screen.position.set(0, 0.33, 0.399);
+  g.add(screen);
+
+  // two big glowing mint eyes set into the screen
   for (const side of [-1, 1]) {
-    const socket = new THREE.Mesh(
-      new THREE.CircleGeometry(0.1, 20),
-      new THREE.MeshStandardMaterial({ color: 0x14161f, roughness: 0.3, metalness: 0.3 })
-    );
-    socket.position.set(side * 0.13, 0.4, 0.29);
-    g.add(socket);
     const eyeGlow = new THREE.Mesh(
-      new THREE.CircleGeometry(0.075, 20),
-      new THREE.MeshBasicMaterial({ color: 0xd8f6ff })
+      new THREE.CircleGeometry(0.078, 20),
+      new THREE.MeshBasicMaterial({ color: 0x7dffb8 })
     );
-    eyeGlow.position.set(side * 0.13, 0.4, 0.295);
+    eyeGlow.position.set(side * 0.1, 0.34, 0.404);
     g.add(eyeGlow);
   }
-  const eyeLight = new THREE.PointLight(0xd8f6ff, 0.5, 1.3, 2);
-  eyeLight.position.set(0, 0.4, 0.45);
+  const eyeLight = new THREE.PointLight(0x7dffb8, 0.55, 1.3, 2);
+  eyeLight.position.set(0, 0.34, 0.55);
   g.add(eyeLight);
+
+  // side "ear" mechanisms — small disc vents, straight from the reference
+  for (const side of [-1, 1]) {
+    const earMat = new THREE.MeshStandardMaterial({ color: 0x8a8478, roughness: 0.4, metalness: 0.5 });
+    const ear = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.075, 0.035, 16), earMat);
+    ear.rotation.z = Math.PI / 2;
+    ear.position.set(side * 0.395, 0.33, 0.02);
+    g.add(ear);
+    const earCap = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.045, 12), earMat);
+    earCap.rotation.z = Math.PI / 2;
+    earCap.position.set(side * 0.415, 0.33, 0.02);
+    g.add(earCap);
+  }
 
   // little antenna — tip glows the worker's live status color
   const antenna = new THREE.Mesh(
@@ -399,20 +515,19 @@ function makeWorker(statusColor, { scale = 1, badge = "💻", variantIndex = 0 }
   antennaTip.position.set(0, 0.76, 0);
   g.add(antennaTip);
 
-  // arms (hands at the end)
-  const armL = makeLimb(0.28, 0.055, 0.08, color, 0xf1f3f8);
-  armL.position.set(-0.25, 0.09, 0);
+  // short stubby arms and legs (hands/feet at the end)
+  const armL = makeLimb(0.19, 0.052, 0.06, color, 0xd8cfc0);
+  armL.position.set(-0.23, -0.02, 0);
   g.add(armL);
-  const armR = makeLimb(0.28, 0.055, 0.08, color, 0xf1f3f8);
-  armR.position.set(0.25, 0.09, 0);
+  const armR = makeLimb(0.19, 0.052, 0.06, color, 0xd8cfc0);
+  armR.position.set(0.23, -0.02, 0);
   g.add(armR);
 
-  // legs (feet at the end)
-  const legL = makeLimb(0.28, 0.07, 0.095, 0x333a5c, 0x2a3050);
-  legL.position.set(-0.12, -0.22, 0);
+  const legL = makeLimb(0.19, 0.062, 0.07, 0x3a3a38, 0x2a2a28);
+  legL.position.set(-0.1, -0.3, 0);
   g.add(legL);
-  const legR = makeLimb(0.28, 0.07, 0.095, 0x333a5c, 0x2a3050);
-  legR.position.set(0.12, -0.22, 0);
+  const legR = makeLimb(0.19, 0.062, 0.07, 0x3a3a38, 0x2a2a28);
+  legR.position.set(0.1, -0.3, 0);
   g.add(legR);
 
   // role badge, floating above the antenna
@@ -777,29 +892,24 @@ async function syncState() {
       const id = "worker:" + w.name;
       let node = workerNodes.get(id);
       if (!node) {
-        const wg = makeWorker(0x5b7a8c, { scale: 0.6, badge: WORKER_ICON[w.name] || "🐣", variantIndex: variantIndexFor(id) });
-        const lbl = makeLabel(w.name, { size: 18 });
-        lbl.position.set(0, 0.9, 0);
+        const wg = makeMachine(0.85);
+        const lbl = makeLabel(`${WORKER_ICON[w.name] || "⚙️"} ${w.name}`, { size: 16 });
+        lbl.position.set(0, 0.55, 0);
         wg.add(lbl);
         hubGroup.add(wg);
         spawnPop(wg);
-        node = { group: wg };
+        node = { group: wg, isMachine: true };
         workerNodes.set(id, node);
         draggable.push({ id, group: wg });
       }
       const pos = positionOnCircle(i, homeTeam.daemon.workers.length, 1.9);
-      if (!node.group.userData.dragging) {
-        node.group.userData.home = pos;
-        if (!node.group.userData.placed) {
-          node.group.position.set(pos.x, node.group.position.y, pos.z);
-          node.group.userData.placed = true;
-        }
+      if (!node.group.userData.dragging && !node.group.userData.placed) {
+        node.group.position.set(pos.x, 0, pos.z);
+        node.group.userData.placed = true;
       }
-      node.group.userData.baseY = 0.29;
-      node.group.userData.mood = w.isRunning ? MOODS.running : MOODS.idle;
       const wColor = w.isRunning ? 0x7a9b5e : 0x5b7a8c;
-      node.group.userData.antennaMat.color.set(wColor);
-      node.group.userData.antennaMat.emissive.set(wColor);
+      node.group.userData.ledMat.color.set(wColor);
+      node.group.userData.running = w.isRunning;
       i++;
     }
   }
@@ -1236,10 +1346,19 @@ function animate() {
     const g = node.group;
     if (g.userData.spawnT !== undefined && g.userData.spawnT < 1) {
       g.userData.spawnT = Math.min(1, g.userData.spawnT + dt * 2.4);
-      g.scale.setScalar(Math.max(0.001, easeOutBack(g.userData.spawnT)) * 0.6);
+      g.scale.setScalar(Math.max(0.001, easeOutBack(g.userData.spawnT)) * 0.85);
     }
-    if (!g.userData.dragging) {
-      animateWorker(g, g.userData.mood || MOODS.idle, t, dt, g.userData.baseY || 0.29);
+    // infrastructure doesn't walk or type — just a status LED, pulsing while
+    // the real background job is actually running
+    if (g.userData.running) {
+      const pulse = 0.5 + Math.abs(Math.sin(t * 4)) * 0.5;
+      g.userData.ledMat.color.offsetHSL(0, 0, 0);
+      g.userData.ledMat.opacity = 1;
+      g.userData.ledMat.transparent = false;
+      g.userData.ledMat.color.multiplyScalar(1);
+      g.children.forEach((c) => {
+        if (c.material === g.userData.ledMat) c.scale.setScalar(0.85 + pulse * 0.3);
+      });
     }
   }
   for (const [, desk] of desks) {
@@ -1297,18 +1416,16 @@ function animateWorker(g, mood, t, dt, baseY) {
       // most of the time wander near the desk — but sometimes walk over to
       // visit a coworker, chat a moment, then head back. That's what makes
       // it read as a company floor instead of isolated robots.
-      if (Math.random() < 0.22) {
-        const sibling = findSibling(g);
-        if (sibling) {
-          const a2 = Math.random() * Math.PI * 2;
-          g.userData.waypoint = new THREE.Vector3(
-            sibling.position.x + Math.cos(a2) * 0.55,
-            0,
-            sibling.position.z + Math.sin(a2) * 0.55
-          );
-          g.userData.visiting = sibling;
-          g.userData.chattedAt = 0;
-        }
+      const sibling = Math.random() < 0.22 ? findSibling(g) : null;
+      if (sibling) {
+        const a2 = Math.random() * Math.PI * 2;
+        g.userData.waypoint = new THREE.Vector3(
+          sibling.position.x + Math.cos(a2) * 0.55,
+          0,
+          sibling.position.z + Math.sin(a2) * 0.55
+        );
+        g.userData.visiting = sibling;
+        g.userData.chattedAt = 0;
       } else {
         const ang = Math.random() * Math.PI * 2;
         const r = Math.random() * mood.radius;
@@ -1434,6 +1551,98 @@ function scatterAmbientDecor() {
   }
 }
 scatterAmbientDecor();
+
+// ---------- the workshop backdrop: the real reference boards + stations ----------
+function makeSignboard(url, width, height, frameColor = 0x6b5233) {
+  const g = new THREE.Group();
+  const frame = new THREE.Mesh(
+    new THREE.BoxGeometry(width + 0.06, height + 0.06, 0.03),
+    new THREE.MeshStandardMaterial({ color: frameColor, roughness: 0.8 })
+  );
+  frame.castShadow = true;
+  g.add(frame);
+  const face = new THREE.Mesh(
+    new THREE.PlaneGeometry(width, height),
+    new THREE.MeshStandardMaterial({ map: _textureLoader.load(url), roughness: 0.6 })
+  );
+  face.position.z = 0.017;
+  g.add(face);
+  return g;
+}
+
+function makeMonitorStation() {
+  const g = new THREE.Group();
+  const desk = makeDesk(0x5b7a8c);
+  g.add(desk);
+  const standMat = new THREE.MeshStandardMaterial({ color: 0x2a2a28, roughness: 0.5, metalness: 0.4 });
+  const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.32, 8), standMat);
+  neck.position.set(-0.06, 0.5, -0.05);
+  g.add(neck);
+  const screen = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.5, 0.43),
+    new THREE.MeshStandardMaterial({ map: _textureLoader.load("/assets/props/monitor_screen.png"), roughness: 0.35 })
+  );
+  screen.position.set(-0.06, 0.72, -0.03);
+  g.add(screen);
+  const screenBack = new THREE.Mesh(
+    new THREE.BoxGeometry(0.54, 0.47, 0.03),
+    new THREE.MeshStandardMaterial({ color: 0x1c1c1e, roughness: 0.5 })
+  );
+  screenBack.position.set(-0.06, 0.72, -0.045);
+  g.add(screenBack);
+  return g;
+}
+
+function buildWorkshopBackdrop() {
+  // wood back wall behind the hub — the boards from your reference live here
+  const wallMat = new THREE.MeshStandardMaterial({
+    color: 0x5a4530, roughness: 0.85, map: makeGrainTexture(0x5a4530),
+  });
+  const wall = new THREE.Mesh(new THREE.BoxGeometry(9, 3.6, 0.12), wallMat);
+  wall.position.set(0, 1.8, -3.3);
+  wall.receiveShadow = true;
+  worldRoot.add(wall);
+  // a couple of wood support beams for the "handcrafted workshop" read
+  for (const x of [-3.8, 3.8]) {
+    const beam = new THREE.Mesh(new THREE.BoxGeometry(0.16, 3.6, 0.16), wallMat);
+    beam.position.set(x, 1.8, -3.2);
+    worldRoot.add(beam);
+  }
+
+  const boardZ = -3.22;
+  const boards = [
+    { url: "/assets/props/whatweneed_sign.png", w: 1.0, h: 0.52, pos: [-3.6, 3.1, boardZ] },
+    { url: "/assets/props/whiteboard_main.png", w: 3.4, h: 1.3, pos: [0.1, 2.55, boardZ] },
+    { url: "/assets/props/strix_sign.png", w: 0.62, h: 0.95, pos: [3.55, 2.6, boardZ] },
+    { url: "/assets/props/principles_note.png", w: 0.6, h: 0.58, pos: [-3.6, 2.1, boardZ] },
+    { url: "/assets/props/project_memory.png", w: 0.8, h: 0.59, pos: [2.9, 1.6, boardZ] },
+  ];
+  for (const b of boards) {
+    const board = makeSignboard(b.url, b.w, b.h);
+    board.position.set(...b.pos);
+    worldRoot.add(board);
+  }
+
+  // wood shelving along the wall base, with folders — ties into the boards above
+  for (const x of [-2.6, 2.0]) {
+    const shelf = makeBookshelf();
+    shelf.position.set(x, 0, -3.05);
+    worldRoot.add(shelf);
+  }
+
+  // "AI Video Studio" workstation, camera-left, as in the reference
+  const monitorStation = makeMonitorStation();
+  monitorStation.position.set(-5.2, 0, -0.6);
+  monitorStation.rotation.y = 0.5;
+  worldRoot.add(monitorStation);
+
+  // "Model Router" — foreground control panel, standing between camera and hub
+  const router = makeSignboard("/assets/props/model_router.png", 0.9, 0.83, 0x2a2a28);
+  router.position.set(-1.9, 0.85, 3.1);
+  router.rotation.y = 0.35;
+  worldRoot.add(router);
+}
+buildWorkshopBackdrop();
 
 // ---------- the forest — the office sits in a clearing inside it ----------
 function makeTree(scale = 1, pine = false) {
