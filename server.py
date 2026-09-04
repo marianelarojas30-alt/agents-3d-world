@@ -358,6 +358,8 @@ class Handler(BaseHTTPRequestHandler):
         elif (path.startswith("/assets/faces/") or path.startswith("/assets/props/")) \
                 and path.count("/") == 3 and path.endswith(".png"):
             self._send_file(path.lstrip("/"), "image/png")
+        elif path.startswith("/assets/textures/") and path.count("/") == 3 and path.endswith(".jpg"):
+            self._send_file(path.lstrip("/"), "image/jpeg")
         else:
             self.send_response(404)
             self.end_headers()

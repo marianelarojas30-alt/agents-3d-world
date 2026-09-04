@@ -126,7 +126,7 @@ renderer.domElement.addEventListener("pointerdown", () => (controls.autoRotate =
   scene.add(sky);
 }
 
-scene.add(new THREE.HemisphereLight(0xcfd6c4, 0x33332c, 0.5));
+scene.add(new THREE.HemisphereLight(0xcfd6c4, 0x3a4048, 0.55));
 const sun = new THREE.DirectionalLight(0xffaa5c, 1.75);
 sun.position.set(-9, 11, 7); // warm sunlight from the left, matching the reference
 sun.castShadow = true;
@@ -137,7 +137,7 @@ sun.shadow.camera.top = 16;
 sun.shadow.camera.bottom = -16;
 sun.shadow.bias = -0.0015;
 scene.add(sun);
-const fill = new THREE.DirectionalLight(0x5f7ea0, 0.45);
+const fill = new THREE.DirectionalLight(0x6f92c4, 0.75);
 fill.position.set(-10, 6, -8);
 scene.add(fill);
 
@@ -146,7 +146,7 @@ scene.add(fill);
   const c = document.createElement("canvas");
   c.width = c.height = 512;
   const ctx = c.getContext("2d");
-  ctx.fillStyle = "#6b6355";
+  ctx.fillStyle = "#82817c";
   ctx.fillRect(0, 0, 512, 512);
   for (let i = 0; i < 3000; i++) {
     const shade = Math.random() < 0.5 ? 0 : 255;
@@ -259,26 +259,67 @@ function makePendantLamp() {
 }
 
 // a simple potted plant — office greenery
-function makePlant(scale = 1) {
+// tropical rainforest foliage — Chocó/Darién humid-jungle green, not desert
+const JUNGLE_GREENS = [0x1f5c33, 0x2a6b3a, 0x347a42, 0x1a4d2b, 0x3e8a4a];
+
+function makeFern(scale = 1) {
   const g = new THREE.Group();
-  const pot = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.16, 0.13, 0.22, 12),
-    new THREE.MeshStandardMaterial({ color: 0xb5754a, roughness: 0.8 })
+  const stemMat = new THREE.MeshStandardMaterial({ color: 0x2e4a1e, roughness: 0.7 });
+  const fronds = 6 + Math.floor(Math.random() * 3);
+  for (let i = 0; i < fronds; i++) {
+    const frond = new THREE.Group();
+    const ang = (i / fronds) * Math.PI * 2 + Math.random() * 0.3;
+    const tilt = 0.5 + Math.random() * 0.5;
+    const leafMat = new THREE.MeshStandardMaterial({
+      color: JUNGLE_GREENS[Math.floor(Math.random() * JUNGLE_GREENS.length)], roughness: 0.5,
+    });
+    const leaflets = 5;
+    for (let j = 0; j < leaflets; j++) {
+      const t = j / leaflets;
+      const leaflet = new THREE.Mesh(new THREE.SphereGeometry(0.05 * (1 - t * 0.6), 6, 5), leafMat);
+      leaflet.scale.set(0.35, 1, 0.9);
+      leaflet.position.set(0, 0.06 + t * 0.32, t * 0.06);
+      frond.add(leaflet);
+    }
+    frond.rotation.set(tilt, ang, 0);
+    frond.castShadow = true;
+    g.add(frond);
+  }
+  const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.02, 0.08, 6), stemMat);
+  stem.position.y = 0.03;
+  g.add(stem);
+  g.scale.setScalar(scale);
+  return g;
+}
+
+function makeBroadLeafPlant(scale = 1) {
+  const g = new THREE.Group();
+  const soil = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.15, 0.17, 0.06, 12),
+    new THREE.MeshStandardMaterial({ color: 0x2a1f14, roughness: 0.9 })
   );
-  pot.position.y = 0.11;
-  pot.castShadow = true;
-  g.add(pot);
-  const leafMat = new THREE.MeshStandardMaterial({ color: 0x4d9a5b, roughness: 0.7 });
-  for (let i = 0; i < 5; i++) {
-    const leaf = new THREE.Mesh(new THREE.SphereGeometry(0.16, 8, 8), leafMat);
-    const ang = (i / 5) * Math.PI * 2;
-    leaf.position.set(Math.cos(ang) * 0.08, 0.34 + Math.random() * 0.12, Math.sin(ang) * 0.08);
-    leaf.scale.set(0.7, 1.3, 0.7);
+  soil.position.y = 0.03;
+  g.add(soil);
+  const leaves = 3 + Math.floor(Math.random() * 3);
+  for (let i = 0; i < leaves; i++) {
+    const leafMat = new THREE.MeshStandardMaterial({
+      color: JUNGLE_GREENS[Math.floor(Math.random() * JUNGLE_GREENS.length)], roughness: 0.35, metalness: 0.05,
+    });
+    const leaf = new THREE.Mesh(new THREE.SphereGeometry(0.15, 10, 8), leafMat);
+    leaf.scale.set(0.32, 1.15, 0.62);
+    const ang = (i / leaves) * Math.PI * 2 + Math.random() * 0.4;
+    const lean = 0.35 + Math.random() * 0.35;
+    leaf.position.set(Math.cos(ang) * 0.05, 0.24, Math.sin(ang) * 0.05);
+    leaf.rotation.set(lean * Math.sin(ang), ang, lean * Math.cos(ang));
     leaf.castShadow = true;
     g.add(leaf);
   }
   g.scale.setScalar(scale);
   return g;
+}
+
+function makePlant(scale = 1) {
+  return Math.random() < 0.55 ? makeFern(scale * 1.3) : makeBroadLeafPlant(scale);
 }
 
 const worldRoot = new THREE.Group();
@@ -763,10 +804,6 @@ function ensureHub() {
   lamp.position.set(0, 3.2, 0);
   hubGroup.add(lamp);
 
-  const lights = makeStringLights(2.6, 10);
-  lights.rotation.y = Math.PI / 4;
-  hubGroup.add(lights);
-
   for (const p of [[-1.7, -0.6], [1.7, -0.7], [-1.2, 1.6], [1.4, 1.4]]) {
     const plant = makePlant(0.9 + Math.random() * 0.3);
     plant.position.set(p[0], 0, p[1]);
@@ -930,9 +967,6 @@ async function syncState() {
       const lamp = makePendantLamp();
       lamp.position.set(0, 3, 0);
       group.add(lamp);
-      const lights = makeStringLights(radius * 1.1, 8);
-      lights.rotation.y = Math.random() * Math.PI * 2;
-      group.add(lights);
       for (let pi = 0; pi < 3; pi++) {
         const ang = (pi / 3) * Math.PI * 2 + 0.6;
         const plant = makePlant(0.8 + Math.random() * 0.3);
@@ -1537,10 +1571,11 @@ function scatterAmbientDecor() {
   const decorMakers = [
     () => makePlant(1 + Math.random() * 0.4),
     () => makePlant(0.7 + Math.random() * 0.3),
+    () => makePlant(1.1 + Math.random() * 0.5),
     () => makeBookshelf(),
     () => makeSofa([0x5b7a8c, 0xa8445a, 0x7a9b5e, 0xc08a4e][Math.floor(Math.random() * 4)]),
   ];
-  const count = 14;
+  const count = 16;
   for (let i = 0; i < count; i++) {
     const ang = (i / count) * Math.PI * 2 + Math.random() * 0.3;
     const r = ringMin + Math.random() * (ringMax - ringMin);
@@ -1548,6 +1583,17 @@ function scatterAmbientDecor() {
     item.position.set(Math.cos(ang) * r, 0, Math.sin(ang) * r);
     item.rotation.y = Math.random() * Math.PI * 2;
     worldRoot.add(item);
+  }
+
+  // ferns everywhere, thick along the floor — Chocó/Darién jungle-humid,
+  // not a couple of stray potted plants
+  for (let i = 0; i < 55; i++) {
+    const ang = Math.random() * Math.PI * 2;
+    const r = 3.2 + Math.random() * 11.5;
+    const fern = makeFern(0.6 + Math.random() * 0.9);
+    fern.position.set(Math.cos(ang) * r, 0, Math.sin(ang) * r);
+    fern.rotation.y = Math.random() * Math.PI * 2;
+    worldRoot.add(fern);
   }
 }
 scatterAmbientDecor();
@@ -1632,42 +1678,6 @@ function makeWoodTexture(baseHex, plankCount = 6) {
 }
 
 function buildWorkshopBackdrop() {
-  // wood back wall behind the hub — the boards from your reference live here
-  const woodTex = makeWoodTexture(0x5a4530, 8);
-  woodTex.repeat.set(2.2, 1);
-  const wallMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.8, map: woodTex });
-  const wall = new THREE.Mesh(new THREE.BoxGeometry(9, 3.6, 0.12), wallMat);
-  wall.position.set(0, 1.8, -3.3);
-  wall.receiveShadow = true;
-  worldRoot.add(wall);
-  // a couple of wood support beams for the "handcrafted workshop" read
-  for (const x of [-3.8, 3.8]) {
-    const beam = new THREE.Mesh(new THREE.BoxGeometry(0.16, 3.6, 0.16), wallMat);
-    beam.position.set(x, 1.8, -3.2);
-    worldRoot.add(beam);
-  }
-
-  const boardZ = -3.22;
-  const boards = [
-    { url: "/assets/props/whatweneed_sign.png", w: 1.0, h: 0.52, pos: [-3.6, 3.1, boardZ] },
-    { url: "/assets/props/whiteboard_main.png", w: 3.4, h: 1.3, pos: [0.1, 2.55, boardZ] },
-    { url: "/assets/props/strix_sign.png", w: 0.62, h: 0.95, pos: [3.55, 2.6, boardZ] },
-    { url: "/assets/props/principles_note.png", w: 0.6, h: 0.58, pos: [-3.6, 2.1, boardZ] },
-    { url: "/assets/props/project_memory.png", w: 0.8, h: 0.59, pos: [2.9, 1.6, boardZ] },
-  ];
-  for (const b of boards) {
-    const board = makeSignboard(b.url, b.w, b.h);
-    board.position.set(...b.pos);
-    worldRoot.add(board);
-  }
-
-  // wood shelving along the wall base, with folders — ties into the boards above
-  for (const x of [-2.6, 2.0]) {
-    const shelf = makeBookshelf();
-    shelf.position.set(x, 0, -3.05);
-    worldRoot.add(shelf);
-  }
-
   // "AI Video Studio" workstation, camera-left, as in the reference
   const monitorStation = makeMonitorStation();
   monitorStation.position.set(-5.2, 0, -0.6);
@@ -1686,20 +1696,6 @@ function buildWorkshopBackdrop() {
   bench.rotation.y = -0.5;
   worldRoot.add(bench);
 
-  // scattered clutter — mugs, notebooks, small tools — so the room feels used
-  const clutterSpots = [
-    [-4.6, -1.3], [-3.0, -2.4], [2.6, -1.8], [4.0, 0.6], [0.6, 2.6], [-1.2, -3.2],
-  ];
-  for (const [x, z] of clutterSpots) {
-    const pick = Math.random();
-    let item;
-    if (pick < 0.34) item = makeMug();
-    else if (pick < 0.67) item = makeNotebookProp();
-    else item = makeToolProp();
-    item.position.set(x, 0, z);
-    item.rotation.y = Math.random() * Math.PI * 2;
-    worldRoot.add(item);
-  }
 }
 
 function makeMug() {
