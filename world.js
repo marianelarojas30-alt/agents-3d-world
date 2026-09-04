@@ -368,14 +368,22 @@ function makeWorker(statusColor, { scale = 1, badge = "💻", variantIndex = 0 }
   head.castShadow = true;
   g.add(head);
 
-  // the exact face from the reference art, on a round visor
-  const visor = new THREE.Mesh(
-    new THREE.CircleGeometry(0.25, 28),
-    new THREE.MeshBasicMaterial({ map: getFaceTexture(variant.face), transparent: true })
-  );
-  visor.position.set(0, 0.4, 0.3);
-  g.add(visor);
-  const eyeLight = new THREE.PointLight(0xd8f6ff, 0.6, 1.4, 2);
+  // two big glowing eyes — reads as a face at a glance, more than one visor does
+  for (const side of [-1, 1]) {
+    const socket = new THREE.Mesh(
+      new THREE.CircleGeometry(0.1, 20),
+      new THREE.MeshStandardMaterial({ color: 0x14161f, roughness: 0.3, metalness: 0.3 })
+    );
+    socket.position.set(side * 0.13, 0.4, 0.29);
+    g.add(socket);
+    const eyeGlow = new THREE.Mesh(
+      new THREE.CircleGeometry(0.075, 20),
+      new THREE.MeshBasicMaterial({ color: 0xd8f6ff })
+    );
+    eyeGlow.position.set(side * 0.13, 0.4, 0.295);
+    g.add(eyeGlow);
+  }
+  const eyeLight = new THREE.PointLight(0xd8f6ff, 0.5, 1.3, 2);
   eyeLight.position.set(0, 0.4, 0.45);
   g.add(eyeLight);
 
@@ -630,7 +638,7 @@ function upsertWorker(id, { color, scale, labelText, status, badge, parentGroup,
 
   if (!entry) {
     const group = makeWorker(color, { scale, badge, variantIndex: variantIndexFor(id) });
-    const label = makeLabel(labelText, { size: 24 });
+    const label = makeLabel(labelText, { size: 16 });
     label.position.set(0, 1.15 * scale + labelLift, 0);
     group.add(label);
     parentGroup.add(group);
@@ -667,7 +675,7 @@ function upsertWorker(id, { color, scale, labelText, status, badge, parentGroup,
 
   if (entry.labelText !== labelText) {
     entry.group.remove(entry.label);
-    const label = makeLabel(labelText, { size: 24 });
+    const label = makeLabel(labelText, { size: 16 });
     label.position.set(0, 1.15 * scale + labelLift, 0);
     entry.group.add(label);
     entry.label = label;
@@ -800,7 +808,7 @@ async function syncState() {
         kind: "agent",
         status: a.status,
         badge: AGENT_BADGE[a.type] || AGENT_BADGE.default,
-        label: `${a.icon || "🐣"} ${truncate(a.task || a.type || a.id, 20)}`,
+        label: `${a.icon || "🐣"} ${truncate(a.task || a.type || a.id, 14)}`,
         role: a.type || "agent",
         task: a.task || "",
         scale: 0.95,
@@ -810,7 +818,7 @@ async function syncState() {
         kind: "task",
         status: t.status,
         badge: taskBadge(t.description),
-        label: `${statusIcon(t.status)} ${truncate(t.description, 22)}`,
+        label: `${statusIcon(t.status)} ${truncate(t.description, 16)}`,
         role: "task worker",
         task: t.description || "",
         priority: t.priority,
@@ -832,7 +840,7 @@ async function syncState() {
         badge: it.badge,
         parentGroup: zone.group,
         deskPos: local,
-        labelLift: (ii % 3) * 0.28,
+        labelLift: (ii % 5) * 0.4,
         data: { ...it, team: team.name },
       });
       entry.group.userData.tooltip = it.label;
@@ -886,7 +894,30 @@ const raycaster = new THREE.Raycaster();
 const pointerNDC = new THREE.Vector2();
 const dragPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 let dragging = null;
+let hoverId = null;
 const tooltipEl = document.getElementById("tooltip");
+
+// ---------- cute voice: workers speak, and you can ask them out loud ----------
+function speakText(text) {
+  if (!text || !window.speechSynthesis) return;
+  window.speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(text);
+  u.lang = "en-US";
+  u.pitch = 1.3;
+  u.rate = 1.0;
+  u.volume = 0.9;
+  const voices = window.speechSynthesis.getVoices();
+  // prefer natural-sounding / kid-ish voices over the robotic default
+  const priority = [/junior/i, /kid/i, /google us english/i, /samantha/i, /ava/i, /allison/i, /female/i];
+  let nice = null;
+  for (const re of priority) {
+    nice = voices.find((v) => re.test(v.name));
+    if (nice) break;
+  }
+  if (nice) u.voice = nice;
+  window.speechSynthesis.speak(u);
+}
+if (window.speechSynthesis) window.speechSynthesis.onvoiceschanged = () => {};
 
 function setPointer(ev) {
   pointerNDC.x = (ev.clientX / innerWidth) * 2 - 1;
@@ -948,8 +979,14 @@ renderer.domElement.addEventListener("pointermove", (ev) => {
       tooltipEl.style.top = ev.clientY + 14 + "px";
       tooltipEl.innerHTML = `<b>${target.userData.tooltip}</b>`;
       renderer.domElement.style.cursor = "grab";
+      if (hoverId !== target.uuid) {
+        hoverId = target.uuid;
+        const entry = [...creatures.values()].find((e) => e.group === target);
+        if (entry) speakText(greetingFor(entry.data || {}));
+      }
     }
   } else {
+    hoverId = null;
     tooltipEl.style.display = "none";
     renderer.domElement.style.cursor = "default";
   }
@@ -1011,6 +1048,7 @@ function addMsg(text, who) {
   div.textContent = text;
   apLog.appendChild(div);
   apLog.scrollTop = apLog.scrollHeight;
+  if (who === "them") speakText(text);
 }
 
 function openAgentPanel(entry) {
@@ -1068,6 +1106,32 @@ function answerFor(d, qRaw) {
     return `I'm a ${d.role || "worker"}${d.kind === "agent" ? "" : " handling a task from the queue"}.`;
   }
   return `Working on: "${d.task}" (${d.status}). Ask me about progress, priority, team, or tags!`;
+}
+
+// voice input — ask them out loud instead of typing
+const micBtn = document.getElementById("ap-mic");
+const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+if (SpeechRec) {
+  const rec = new SpeechRec();
+  rec.lang = "en-US";
+  rec.interimResults = false;
+  rec.maxAlternatives = 1;
+  rec.onresult = (ev) => {
+    const text = ev.results[0][0].transcript;
+    document.getElementById("ap-input").value = text;
+    document.getElementById("ap-form").requestSubmit();
+  };
+  rec.onend = () => micBtn.classList.remove("listening");
+  rec.onerror = () => micBtn.classList.remove("listening");
+  micBtn.addEventListener("click", () => {
+    if (!activeEntry) return;
+    window.speechSynthesis.cancel();
+    micBtn.classList.add("listening");
+    rec.start();
+  });
+} else {
+  micBtn.disabled = true;
+  micBtn.title = "Voice input not supported in this browser";
 }
 
 document.getElementById("ap-form").addEventListener("submit", async (ev) => {
@@ -1371,7 +1435,7 @@ function plantForest() {
     worldRoot.add(tree);
   }
 }
-plantForest();
+// (forest removed — was blocking the view and not what was asked for)
 
 syncState();
 setInterval(syncState, POLL_MS);

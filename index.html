@@ -90,6 +90,11 @@
     background: #51cf66; border: none; border-radius: 10px; padding: 0 14px;
     font-weight: 700; cursor: pointer; color: #04321a;
   }
+  #ap-mic {
+    background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.12);
+    border-radius: 10px; width: 38px; font-size: 15px; cursor: pointer; color: #fff;
+  }
+  #ap-mic.listening { background: #e64980; animation: pulse 1s ease-in-out infinite; }
 </style>
 </head>
 <body>
@@ -122,6 +127,7 @@
   </div>
   <div id="ap-log"></div>
   <form id="ap-form">
+    <button id="ap-mic" type="button" title="Ask by voice">🎤</button>
     <input id="ap-input" type="text" placeholder="Ask what they're working on…" autocomplete="off" />
     <button id="ap-send" type="submit">Send</button>
   </form>
