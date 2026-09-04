@@ -517,6 +517,47 @@ function makeDesk(color) {
   return g;
 }
 
+// ---------- coworker chatter: they visit each other and talk ----------
+function findSibling(g) {
+  const candidates = [];
+  for (const e of creatures.values()) {
+    if (e.group !== g && e.group.parent === g.parent && !e.group.userData.dragging) candidates.push(e.group);
+  }
+  if (!candidates.length) return null;
+  return candidates[Math.floor(Math.random() * candidates.length)];
+}
+
+const SMALL_TALK = [
+  "Almost done here!", "Need a hand with this?", "This one's tricky.",
+  "Nice progress today!", "Running a bit behind.", "Check this out!",
+  "One sec, almost got it.", "Looking good so far.", "Let's sync after this.",
+  "Found a bug, fixing it.", "Ready for review!", "Coffee break soon?",
+  "Great work on that.", "Almost shipped!", "Can you take a look?",
+];
+const chatterPool = [];
+function sayChatter(g) {
+  if (!g) return;
+  const text = SMALL_TALK[Math.floor(Math.random() * SMALL_TALK.length)];
+  const bubble = makeLabel(text, { size: 20, pad: 7 });
+  bubble.position.set(0, 1.35, 0);
+  bubble.material.opacity = 0;
+  g.add(bubble);
+  chatterPool.push({ sprite: bubble, group: g, age: 0 });
+}
+function updateChatter(dt) {
+  for (let i = chatterPool.length - 1; i >= 0; i--) {
+    const c = chatterPool[i];
+    c.age += dt;
+    const fadeIn = Math.min(1, c.age * 4);
+    const fadeOut = Math.max(0, 1 - (c.age - 2.2) * 3);
+    c.sprite.material.opacity = Math.min(fadeIn, fadeOut);
+    if (c.age > 2.8) {
+      c.group.remove(c.sprite);
+      chatterPool.splice(i, 1);
+    }
+  }
+}
+
 // ---------- confetti ----------
 const confettiPool = [];
 function burstConfetti(pos, color) {
@@ -1226,6 +1267,7 @@ function animate() {
   }
 
   updateConfetti(dt);
+  updateChatter(dt);
   controls.update();
   renderer.render(scene, camera);
 }
@@ -1252,9 +1294,32 @@ function animateWorker(g, mood, t, dt, baseY) {
     g.rotation.y += da * Math.min(1, dt * 6);
   } else {
     if (!g.userData.waypoint || g.position.distanceTo(g.userData.waypoint) < 0.05) {
-      const ang = Math.random() * Math.PI * 2;
-      const r = Math.random() * mood.radius;
-      g.userData.waypoint = new THREE.Vector3(home.x + Math.cos(ang) * r, 0, home.z + Math.sin(ang) * r);
+      // most of the time wander near the desk — but sometimes walk over to
+      // visit a coworker, chat a moment, then head back. That's what makes
+      // it read as a company floor instead of isolated robots.
+      if (Math.random() < 0.22) {
+        const sibling = findSibling(g);
+        if (sibling) {
+          const a2 = Math.random() * Math.PI * 2;
+          g.userData.waypoint = new THREE.Vector3(
+            sibling.position.x + Math.cos(a2) * 0.55,
+            0,
+            sibling.position.z + Math.sin(a2) * 0.55
+          );
+          g.userData.visiting = sibling;
+          g.userData.chattedAt = 0;
+        }
+      } else {
+        const ang = Math.random() * Math.PI * 2;
+        const r = Math.random() * mood.radius;
+        g.userData.waypoint = new THREE.Vector3(home.x + Math.cos(ang) * r, 0, home.z + Math.sin(ang) * r);
+        g.userData.visiting = null;
+      }
+    }
+    if (g.userData.visiting && !g.userData.chattedAt && g.position.distanceTo(g.userData.waypoint) < 0.15) {
+      g.userData.chattedAt = t;
+      sayChatter(g);
+      sayChatter(g.userData.visiting);
     }
     const dir = new THREE.Vector3().subVectors(g.userData.waypoint, g.position);
     dir.y = 0;
