@@ -946,15 +946,14 @@ async function syncState() {
       let node = workerNodes.get(id);
       if (!node) {
         const wg = makeMachine(0.85);
-        const lbl = makeLabel(`${WORKER_ICON[w.name] || "⚙️"} ${w.name}`, { size: 16 });
-        lbl.position.set(0, 0.55, 0);
-        wg.add(lbl);
         hubGroup.add(wg);
         spawnPop(wg);
         node = { group: wg, isMachine: true };
         workerNodes.set(id, node);
         draggable.push({ id, group: wg });
       }
+      // no floating label — hover to see the name, keeps the hub readable
+      node.group.userData.tooltip = `${WORKER_ICON[w.name] || "⚙️"} ${w.name} — ${w.isRunning ? "running" : "idle"}`;
       const pos = positionOnCircle(i, homeTeam.daemon.workers.length, 1.9);
       if (!node.group.userData.dragging && !node.group.userData.placed) {
         node.group.position.set(pos.x, 0, pos.z);
@@ -1164,7 +1163,8 @@ renderer.domElement.addEventListener("pointermove", (ev) => {
     return;
   }
   raycaster.setFromCamera(pointerNDC, camera);
-  const hits = raycaster.intersectObjects([...creatures.values()].map((e) => e.group), true);
+  const hoverTargets = [...creatures.values()].map((e) => e.group).concat([...workerNodes.values()].map((n) => n.group));
+  const hits = raycaster.intersectObjects(hoverTargets, true);
   if (hits.length) {
     let target = hits[0].object;
     while (target && !target.userData.tooltip) target = target.parent;
@@ -1178,6 +1178,7 @@ renderer.domElement.addEventListener("pointermove", (ev) => {
         hoverId = target.uuid;
         const entry = [...creatures.values()].find((e) => e.group === target);
         if (entry) speakText(greetingFor(entry.data || {}));
+        else speakText(target.userData.tooltip);
       }
     }
   } else {

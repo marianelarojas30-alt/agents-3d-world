@@ -105,6 +105,41 @@ def get_bucket(teams, name):
     })
 
 
+def agent_type_icon(agent_type):
+    return AGENT_TYPE_ICON.get(agent_type, AGENT_TYPE_ICON["default"])
+
+
+def load_agent_store(cf_dir):
+    data = safe_read_json(os.path.join(cf_dir, "agents", "store.json"))
+    if not isinstance(data, dict):
+        return {}
+    agents = data.get("agents", {})
+    return agents if isinstance(agents, dict) else {}
+
+
+def normalize_agent_record(agent, fallback_id="", agent_store=None):
+    agent_store = agent_store or {}
+    if isinstance(agent, str):
+        data = agent_store.get(agent, {})
+        if not isinstance(data, dict):
+            data = {}
+        agent_id = agent
+    elif isinstance(agent, dict):
+        data = agent
+        agent_id = data.get("id") or data.get("agentId") or fallback_id
+    else:
+        return None
+
+    agent_type = data.get("type") or data.get("agentType") or "default"
+    return {
+        "id": agent_id,
+        "type": agent_type,
+        "icon": agent_type_icon(agent_type),
+        "status": data.get("status", "idle"),
+        "task": data.get("currentTask") or data.get("task") or "",
+    }
+
+
 def build_state():
     teams = {}
     now = time.time()
@@ -113,21 +148,21 @@ def build_state():
         team = team_name_from_dir(cf_dir)
         is_global_store = team == "home"
         bucket = get_bucket(teams, team)
+        agent_store = load_agent_store(cf_dir)
 
         swarm_state = safe_read_json(os.path.join(cf_dir, "swarm", "swarm-state.json"))
         if swarm_state:
             for swarm_id, swarm in swarm_state.get("swarms", {}).items():
                 for agent in swarm.get("agents", []) or []:
-                    bucket["agents"].append({
-                        "id": agent.get("id", swarm_id),
-                        "type": agent.get("type", "default"),
-                        "icon": AGENT_TYPE_ICON.get(agent.get("type", "default"), AGENT_TYPE_ICON["default"]),
-                        "status": agent.get("status", "idle"),
-                        "task": agent.get("currentTask") or agent.get("task") or "",
+                    agent_entry = normalize_agent_record(agent, swarm_id, agent_store)
+                    if not agent_entry:
+                        continue
+                    agent_entry.update({
                         "swarmId": swarm_id,
                         "swarmStatus": swarm.get("status", "unknown"),
                         "topology": swarm.get("topology", ""),
                     })
+                    bucket["agents"].append(agent_entry)
                 if swarm.get("status") not in ("terminated",) and not swarm.get("agents"):
                     bucket["swarm_meta"] = {
                         "id": swarm_id,
@@ -138,16 +173,12 @@ def build_state():
         agents_dir = os.path.join(cf_dir, "agents")
         if os.path.isdir(agents_dir):
             for fname in os.listdir(agents_dir):
-                if fname.endswith(".json"):
-                    data = safe_read_json(os.path.join(agents_dir, fname))
-                    if data:
-                        bucket["agents"].append({
-                            "id": data.get("id", fname),
-                            "type": data.get("type", "default"),
-                            "icon": AGENT_TYPE_ICON.get(data.get("type", "default"), AGENT_TYPE_ICON["default"]),
-                            "status": data.get("status", "idle"),
-                            "task": data.get("currentTask") or data.get("task") or "",
-                        })
+                if fname == "store.json" or not fname.endswith(".json"):
+                    continue
+                data = safe_read_json(os.path.join(agents_dir, fname))
+                agent_entry = normalize_agent_record(data, fname, agent_store)
+                if agent_entry:
+                    bucket["agents"].append(agent_entry)
 
         tasks_store = safe_read_json(os.path.join(cf_dir, "tasks", "store.json"))
         if tasks_store:
@@ -344,7 +375,12 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         path = self.path.split("?")[0]
         if path == "/api/state":
-            self._send_json(build_state())
+            try:
+                self._send_json(build_state())
+            except Exception as e:
+                # a file being read mid-write (agent store, task store, etc.)
+                # should never take the whole server down for every viewer
+                self._send_json({"teams": [], "error": str(e)}, status=200)
         elif path == "/api/backends":
             self._send_json(backends_info())
         elif path == "/" or path == "/index.html":
