@@ -14,7 +14,6 @@ import tempfile
 import time
 import threading
 import urllib.request
-import urllib.error
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 HOME = os.path.expanduser("~")
