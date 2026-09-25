@@ -19,6 +19,20 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 HOME = os.path.expanduser("~")
 ROOT = os.path.dirname(os.path.abspath(__file__))
 OLLAMA_URL = "http://127.0.0.1:11434"
+PORT = 8737
+MAX_REQUEST_BYTES = 32 * 1024
+ALLOWED_HOSTS = {
+    "127.0.0.1",
+    "127.0.0.1:8737",
+    "localhost",
+    "localhost:8737",
+    "[::1]",
+    "[::1]:8737",
+}
+ALLOWED_ORIGINS = {
+    "http://127.0.0.1:8737",
+    "http://localhost:8737",
+}
 
 
 def find_codex_bin():
@@ -320,12 +334,35 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
         pass  # keep console quiet
 
+    def _local_request_allowed(self):
+        host = (self.headers.get("Host") or "").strip().lower()
+        if host not in ALLOWED_HOSTS:
+            return False
+        origin = (self.headers.get("Origin") or "").strip().lower()
+        return not origin or origin in ALLOWED_ORIGINS
+
+    def _reject_nonlocal(self):
+        if self._local_request_allowed():
+            return False
+        self.send_response(403)
+        self.send_header("Content-Length", "0")
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        return True
+
+    def _security_headers(self):
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("X-Frame-Options", "DENY")
+        self.send_header("Referrer-Policy", "no-referrer")
+        self.send_header("Cross-Origin-Resource-Policy", "same-origin")
+
     def _send_json(self, payload, status=200):
         body = json.dumps(payload).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
+        self._security_headers()
         self.end_headers()
         self.wfile.write(body)
 
@@ -342,13 +379,23 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
+        self._security_headers()
         self.end_headers()
         self.wfile.write(body)
 
     def do_POST(self):
+        if self._reject_nonlocal():
+            return
         path = self.path.split("?")[0]
         if path == "/api/chat":
-            length = int(self.headers.get("Content-Length", 0))
+            try:
+                length = int(self.headers.get("Content-Length", 0))
+            except (TypeError, ValueError):
+                self._send_json({"error": "invalid content length"}, status=400)
+                return
+            if length < 0 or length > MAX_REQUEST_BYTES:
+                self._send_json({"error": "request too large"}, status=413)
+                return
             try:
                 body = json.loads(self.rfile.read(length) or b"{}")
             except Exception:
@@ -373,6 +420,8 @@ class Handler(BaseHTTPRequestHandler):
             self.end_headers()
 
     def do_GET(self):
+        if self._reject_nonlocal():
+            return
         path = self.path.split("?")[0]
         if path == "/api/state":
             try:
@@ -402,9 +451,8 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main():
-    port = 8737
-    server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
-    print(f"Ruflo 3D world running at http://127.0.0.1:{port}")
+    server = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
+    print(f"Ruflo 3D world running at http://127.0.0.1:{PORT}")
     server.serve_forever()
 
 
