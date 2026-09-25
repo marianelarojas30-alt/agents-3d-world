@@ -12,6 +12,7 @@ import shutil
 import subprocess
 import tempfile
 import time
+import threading
 import urllib.request
 import urllib.error
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -33,6 +34,12 @@ ALLOWED_ORIGINS = {
     "http://127.0.0.1:8737",
     "http://localhost:8737",
 }
+
+STATE_CACHE_TTL = 0.75
+_DIR_CACHE_TTL = 5.0
+_state_cache = {"at": 0.0, "value": None}
+_dir_cache = {"at": 0.0, "value": None}
+_cache_lock = threading.Lock()
 
 
 def find_codex_bin():
@@ -80,6 +87,12 @@ def safe_read_json(path):
 
 
 def find_claude_flow_dirs():
+    now = time.monotonic()
+    with _cache_lock:
+        cached = _dir_cache["value"]
+        if cached is not None and now - _dir_cache["at"] < _DIR_CACHE_TTL:
+            return list(cached)
+
     dirs = set()
     for path in glob.glob(os.path.join(HOME, "*/.claude-flow")):
         if os.path.isdir(path):
@@ -90,7 +103,11 @@ def find_claude_flow_dirs():
     top = os.path.join(HOME, ".claude-flow")
     if os.path.isdir(top):
         dirs.add(top)
-    return sorted(dirs)
+    result = sorted(dirs)
+    with _cache_lock:
+        _dir_cache["at"] = now
+        _dir_cache["value"] = result
+    return list(result)
 
 
 AGENT_TYPE_ICON = {
@@ -155,6 +172,12 @@ def normalize_agent_record(agent, fallback_id="", agent_store=None):
 
 
 def build_state():
+    monotonic_now = time.monotonic()
+    with _cache_lock:
+        cached = _state_cache["value"]
+        if cached is not None and monotonic_now - _state_cache["at"] < STATE_CACHE_TTL:
+            return cached
+
     teams = {}
     now = time.time()
 
@@ -237,10 +260,14 @@ def build_state():
         if v["agents"] or v["tasks"] or v.get("swarm_meta") or v.get("daemon")
     }
 
-    return {
+    result = {
         "generatedAt": now,
         "teams": list(teams.values()),
     }
+    with _cache_lock:
+        _state_cache["at"] = monotonic_now
+        _state_cache["value"] = result
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -260,8 +287,9 @@ def list_ollama_models():
 
 
 def backends_info():
+    models = list_ollama_models()
     return {
-        "ollama": {"available": bool(list_ollama_models()), "models": list_ollama_models()},
+        "ollama": {"available": bool(models), "models": models},
         "codex": {"available": bool(CODEX_BIN)},
     }
 
