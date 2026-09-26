@@ -1070,10 +1070,14 @@ async function syncState() {
 
 function renderLegend(teams) {
   const el = document.getElementById("legend");
-  el.innerHTML = "";
+  el.replaceChildren();
   const add = (color, text) => {
     const span = document.createElement("span");
-    span.innerHTML = `<span class="dot" style="background:${color}"></span>${text}`;
+    const dot = document.createElement("span");
+    dot.className = "dot";
+    dot.style.background = String(color);
+    span.appendChild(dot);
+    span.appendChild(document.createTextNode(String(text)));
     el.appendChild(span);
   };
   add("#ffd43b", "pending");
@@ -1172,7 +1176,10 @@ renderer.domElement.addEventListener("pointermove", (ev) => {
       tooltipEl.style.display = "block";
       tooltipEl.style.left = ev.clientX + 14 + "px";
       tooltipEl.style.top = ev.clientY + 14 + "px";
-      tooltipEl.innerHTML = `<b>${target.userData.tooltip}</b>`;
+      tooltipEl.replaceChildren();
+      const strong = document.createElement("b");
+      strong.textContent = String(target.userData.tooltip);
+      tooltipEl.appendChild(strong);
       renderer.domElement.style.cursor = "grab";
       if (hoverId !== target.uuid) {
         hoverId = target.uuid;
@@ -1253,7 +1260,7 @@ function openAgentPanel(entry) {
   document.getElementById("ap-avatar").textContent = d.badge || "💻";
   document.getElementById("ap-title").textContent = d.task ? truncate(d.task, 34) : d.id || "worker";
   document.getElementById("ap-sub").textContent = `${d.team || ""} · ${d.role || "worker"}`;
-  apLog.innerHTML = "";
+  apLog.replaceChildren();
   addMsg(greetingFor(d), "them");
   panelEl.classList.add("open");
   document.getElementById("ap-input").focus();
