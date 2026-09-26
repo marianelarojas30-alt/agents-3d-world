@@ -12,13 +12,33 @@ import shutil
 import subprocess
 import tempfile
 import time
+import threading
 import urllib.request
-import urllib.error
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 HOME = os.path.expanduser("~")
 ROOT = os.path.dirname(os.path.abspath(__file__))
 OLLAMA_URL = "http://127.0.0.1:11434"
+PORT = 8737
+MAX_REQUEST_BYTES = 32 * 1024
+ALLOWED_HOSTS = {
+    "127.0.0.1",
+    "127.0.0.1:8737",
+    "localhost",
+    "localhost:8737",
+    "[::1]",
+    "[::1]:8737",
+}
+ALLOWED_ORIGINS = {
+    "http://127.0.0.1:8737",
+    "http://localhost:8737",
+}
+
+STATE_CACHE_TTL = 0.75
+_DIR_CACHE_TTL = 5.0
+_state_cache = {"at": 0.0, "value": None}
+_dir_cache = {"at": 0.0, "value": None}
+_cache_lock = threading.Lock()
 
 
 def find_codex_bin():
@@ -66,6 +86,12 @@ def safe_read_json(path):
 
 
 def find_claude_flow_dirs():
+    now = time.monotonic()
+    with _cache_lock:
+        cached = _dir_cache["value"]
+        if cached is not None and now - _dir_cache["at"] < _DIR_CACHE_TTL:
+            return list(cached)
+
     dirs = set()
     for path in glob.glob(os.path.join(HOME, "*/.claude-flow")):
         if os.path.isdir(path):
@@ -76,7 +102,11 @@ def find_claude_flow_dirs():
     top = os.path.join(HOME, ".claude-flow")
     if os.path.isdir(top):
         dirs.add(top)
-    return sorted(dirs)
+    result = sorted(dirs)
+    with _cache_lock:
+        _dir_cache["at"] = now
+        _dir_cache["value"] = result
+    return list(result)
 
 
 AGENT_TYPE_ICON = {
@@ -141,6 +171,12 @@ def normalize_agent_record(agent, fallback_id="", agent_store=None):
 
 
 def build_state():
+    monotonic_now = time.monotonic()
+    with _cache_lock:
+        cached = _state_cache["value"]
+        if cached is not None and monotonic_now - _state_cache["at"] < STATE_CACHE_TTL:
+            return cached
+
     teams = {}
     now = time.time()
 
@@ -223,10 +259,14 @@ def build_state():
         if v["agents"] or v["tasks"] or v.get("swarm_meta") or v.get("daemon")
     }
 
-    return {
+    result = {
         "generatedAt": now,
         "teams": list(teams.values()),
     }
+    with _cache_lock:
+        _state_cache["at"] = monotonic_now
+        _state_cache["value"] = result
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -246,8 +286,9 @@ def list_ollama_models():
 
 
 def backends_info():
+    models = list_ollama_models()
     return {
-        "ollama": {"available": bool(list_ollama_models()), "models": list_ollama_models()},
+        "ollama": {"available": bool(models), "models": models},
         "codex": {"available": bool(CODEX_BIN)},
     }
 
@@ -320,12 +361,42 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
         pass  # keep console quiet
 
+    def _local_request_allowed(self):
+        host = (self.headers.get("Host") or "").strip().lower()
+        if host not in ALLOWED_HOSTS:
+            return False
+        origin = (self.headers.get("Origin") or "").strip().lower()
+        return not origin or origin in ALLOWED_ORIGINS
+
+    def _reject_nonlocal(self):
+        if self._local_request_allowed():
+            return False
+        self.send_response(403)
+        self.send_header("Content-Length", "0")
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        return True
+
+    def _security_headers(self):
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("X-Frame-Options", "DENY")
+        self.send_header("Referrer-Policy", "no-referrer")
+        self.send_header("Cross-Origin-Resource-Policy", "same-origin")
+        self.send_header("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+        self.send_header(
+            "Content-Security-Policy",
+            "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
+            "img-src 'self' data:; connect-src 'self'; object-src 'none'; "
+            "base-uri 'none'; frame-ancestors 'none'"
+        )
+
     def _send_json(self, payload, status=200):
         body = json.dumps(payload).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
+        self._security_headers()
         self.end_headers()
         self.wfile.write(body)
 
@@ -342,13 +413,23 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
+        self._security_headers()
         self.end_headers()
         self.wfile.write(body)
 
     def do_POST(self):
+        if self._reject_nonlocal():
+            return
         path = self.path.split("?")[0]
         if path == "/api/chat":
-            length = int(self.headers.get("Content-Length", 0))
+            try:
+                length = int(self.headers.get("Content-Length", 0))
+            except (TypeError, ValueError):
+                self._send_json({"error": "invalid content length"}, status=400)
+                return
+            if length < 0 or length > MAX_REQUEST_BYTES:
+                self._send_json({"error": "request too large"}, status=413)
+                return
             try:
                 body = json.loads(self.rfile.read(length) or b"{}")
             except Exception:
@@ -373,6 +454,8 @@ class Handler(BaseHTTPRequestHandler):
             self.end_headers()
 
     def do_GET(self):
+        if self._reject_nonlocal():
+            return
         path = self.path.split("?")[0]
         if path == "/api/state":
             try:
@@ -402,9 +485,8 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main():
-    port = 8737
-    server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
-    print(f"Ruflo 3D world running at http://127.0.0.1:{port}")
+    server = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
+    print(f"Ruflo 3D world running at http://127.0.0.1:{PORT}")
     server.serve_forever()
 
 
