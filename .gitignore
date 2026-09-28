@@ -4,3 +4,4 @@ review-receipts/
 server.log
 .DS_Store
 assets/reference.png
+.claude-flow/
