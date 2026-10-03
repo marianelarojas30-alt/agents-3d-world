@@ -49,4 +49,8 @@ Click any worker to open a chat panel. By default it answers from the real data 
 
 ## License
 
-MIT — see [LICENSE](LICENSE). Take it, fork it, make your own agents cuter.
+Free for **noncommercial use** under the [PolyForm Noncommercial License 1.0.0](LICENSE). Selling it, charging for it, or any commercial use requires a separate written commercial license from the author, Marianela Bourgault (contact through GitHub). Copies and modified versions must keep the copyright notice.
+
+Versions published before 2026-10-02 were under the MIT License; copies obtained under those terms keep them.
+
+The bundled `vendor/` files (three.js) keep their own MIT license.
