@@ -21,18 +21,12 @@ ROOT = os.path.dirname(os.path.abspath(__file__))
 OLLAMA_URL = "http://127.0.0.1:11434"
 PORT = 8737
 MAX_REQUEST_BYTES = 32 * 1024
-ALLOWED_HOSTS = {
-    "127.0.0.1",
-    "127.0.0.1:8737",
-    "localhost",
-    "localhost:8737",
-    "[::1]",
-    "[::1]:8737",
-}
-ALLOWED_ORIGINS = {
-    "http://127.0.0.1:8737",
-    "http://localhost:8737",
-}
+# Requests are accepted only when both the Host header and (if present) the Origin
+# name this local server, which blocks DNS-rebinding and cross-site requests. Both
+# sets are derived from PORT so the port lives in exactly one place.
+_LOCAL_NAMES = ("127.0.0.1", "localhost", "[::1]")
+ALLOWED_HOSTS = {*_LOCAL_NAMES, *(f"{name}:{PORT}" for name in _LOCAL_NAMES)}
+ALLOWED_ORIGINS = {f"http://{name}:{PORT}" for name in ("127.0.0.1", "localhost")}
 
 STATE_CACHE_TTL = 0.75
 _DIR_CACHE_TTL = 5.0
@@ -435,8 +429,14 @@ class Handler(BaseHTTPRequestHandler):
             except Exception:
                 self._send_json({"error": "bad request"}, status=400)
                 return
+            if not isinstance(body, dict):
+                self._send_json({"error": "bad request"}, status=400)
+                return
             backend = body.get("backend", "")
             worker = body.get("worker", {})
+            if not isinstance(backend, str) or not isinstance(worker, dict):
+                self._send_json({"error": "bad request"}, status=400)
+                return
             message = str(body.get("message", ""))[:500]
             try:
                 if backend.startswith("ollama:"):
