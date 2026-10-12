@@ -14,6 +14,7 @@ import tempfile
 import time
 import threading
 import urllib.request
+from pathlib import Path
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 HOME = os.path.expanduser("~")
@@ -270,9 +271,20 @@ def build_state():
 # own machine's Ollama daemon, or the codex binary you already have signed in.
 # ---------------------------------------------------------------------------
 
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+def _local_open(request, timeout):
+    # Never inherit a proxy or follow a redirect out of the local trust boundary.
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), _NoRedirect())
+    return opener.open(request, timeout=timeout)
+
+
 def list_ollama_models():
     try:
-        with urllib.request.urlopen(f"{OLLAMA_URL}/api/tags", timeout=2) as r:
+        with _local_open(f"{OLLAMA_URL}/api/tags", timeout=2) as r:
             data = json.load(r)
         return [m["name"] for m in data.get("models", [])]
     except Exception:
@@ -323,7 +335,7 @@ def call_ollama(model, worker, message):
         f"{OLLAMA_URL}/api/chat", data=payload,
         headers={"Content-Type": "application/json"}, method="POST",
     )
-    with urllib.request.urlopen(req, timeout=60) as r:
+    with _local_open(req, timeout=60) as r:
         data = json.load(r)
     return data.get("message", {}).get("content", "").strip()
 
@@ -395,11 +407,21 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def _send_file(self, rel_path, content_type):
-        full = os.path.join(ROOT, rel_path)
         try:
-            with open(full, "rb") as f:
+            root = Path(ROOT).resolve()
+            relative = Path(rel_path)
+            if relative.is_absolute() or ".." in relative.parts:
+                raise ValueError("asset outside static root")
+            full = root.joinpath(relative)
+            full.resolve().relative_to(root)
+            probe = root
+            for part in relative.parts:
+                probe = probe / part
+                if probe.is_symlink():
+                    raise ValueError("symlink asset refused")
+            with full.open("rb") as f:
                 body = f.read()
-        except FileNotFoundError:
+        except (OSError, ValueError):
             self.send_response(404)
             self.end_headers()
             return
