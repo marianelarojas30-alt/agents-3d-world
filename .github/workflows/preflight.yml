@@ -1,6 +1,7 @@
 name: preflight
 
 on:
+  workflow_dispatch:
   push:
   pull_request:
 
