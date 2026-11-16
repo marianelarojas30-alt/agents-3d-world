@@ -3,8 +3,10 @@ import importlib.util
 import json
 import pathlib
 import threading
+import tempfile
 import unittest
 from http.server import ThreadingHTTPServer
+from unittest import mock
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 spec = importlib.util.spec_from_file_location("server", ROOT / "server.py")
@@ -41,6 +43,26 @@ class ServerSecurityTests(unittest.TestCase):
         payload = res.read()
         conn.close()
         return res, payload
+
+    def test_only_the_home_store_routes_tasks_to_tagged_islands(self):
+        with tempfile.TemporaryDirectory() as directory:
+            home = pathlib.Path(directory) / "sam"
+            for project, key in ((home, "global"), (home / "sam", "project"), (home / "home", "local")):
+                tasks = project / ".claude-flow" / "tasks"
+                tasks.mkdir(parents=True)
+                (tasks / "store.json").write_text(json.dumps({
+                    "tasks": {key: {"tags": ["tagged"]}},
+                }), encoding="utf-8")
+
+            with mock.patch.object(server, "HOME", str(home)), \
+                 mock.patch.object(server, "_dir_cache", {"at": 0, "value": None}), \
+                 mock.patch.object(server, "_state_cache", {"at": 0, "value": None}):
+                response, body = self.request("GET", "/api/state")
+
+        self.assertEqual(response.status, 200)
+        teams = {team["name"]: [task["id"] for task in team["tasks"]]
+                 for team in json.loads(body)["teams"]}
+        self.assertEqual(teams, {"tagged": ["global"], "sam": ["project"], "home": ["local"]})
 
     def test_allowlists_follow_port(self):
         self.assertIn(f"localhost:{server.PORT}", server.ALLOWED_HOSTS)
