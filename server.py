@@ -112,14 +112,6 @@ AGENT_TYPE_ICON = {
 }
 
 
-def team_name_from_dir(cf_dir):
-    project_dir = os.path.dirname(cf_dir)
-    name = os.path.basename(project_dir)
-    if name in (".", "", HOME.split("/")[-1]):
-        name = "home"
-    return name
-
-
 def get_bucket(teams, name):
     return teams.setdefault(name, {
         "name": name,
@@ -175,9 +167,10 @@ def build_state():
     teams = {}
     now = time.time()
 
+    global_dir = os.path.join(HOME, ".claude-flow")
     for cf_dir in find_claude_flow_dirs():
-        team = team_name_from_dir(cf_dir)
-        is_global_store = team == "home"
+        is_global_store = cf_dir == global_dir
+        team = "home" if is_global_store else os.path.basename(os.path.dirname(cf_dir))
         bucket = get_bucket(teams, team)
         agent_store = load_agent_store(cf_dir)
 
